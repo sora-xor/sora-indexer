@@ -1,0 +1,81 @@
+{
+	"name": "kusama-transfers",
+	"version": "1.0.0",
+	"private": true,
+	"engines": {
+		"node": ">=20"
+	},
+	"husky": {
+		"hooks": {
+		  	"pre-commit": "lint-staged"
+		}
+	},
+	"lint-staged": {
+		"**/*.{js,jsx,ts,tsx,json,css,scss,md}": [
+			"prettier --write",
+			"git add"
+		]
+	},
+	"scripts": {
+		"build": "rm -rf lib && tsc",
+		"update": "npx npm-check-updates --filter /subsquid/ --upgrade && npm i -f",
+		"codegen": "sqd codegen",
+		"format": "prettier --write \"**/*.ts\"",
+		"db:migrate": "npx squid-typeorm-migration apply",
+		"processor:start": "node lib/processor.js",
+		"query-node:start": "squid-graphql-server --subscriptions --max-response-size 10000 --dumb-cache in-memory --dumb-cache-ttl 1000 --dumb-cache-size 100 --dumb-cache-max-age 1000",
+		"generate-types:production": "ts-node ./scripts/prepare-typegen-json.ts production && sqd typegen",
+		"generate-types:stage": "ts-node ./scripts/prepare-typegen-json.ts stage && sqd typegen",
+		"generate-types:test": "ts-node ./scripts/prepare-typegen-json.ts test && sqd typegen",
+		"generate-types:dev": "ts-node ./scripts/prepare-typegen-json.ts dev && sqd typegen",
+		"generate-additional-types": "ts-node ./scripts/generate-additional-types.ts",
+		"merge-types": "ts-node ./scripts/merge-types.ts",
+		"generate-types": "npm run generate-types:production && npm run generate-types:stage && npm run generate-types:test && npm run generate-types:dev && npm run merge-types && npm run generate-additional-types",
+		"generate-squid-yaml": "ts-node ./scripts/generate-squid-yaml.ts",
+		"generate-squid-yaml:production": "ts-node ./scripts/generate-squid-yaml.ts production",
+		"generate-squid-yaml:stage": "ts-node ./scripts/generate-squid-yaml.ts stage",
+		"generate-squid-yaml:test": "ts-node ./scripts/generate-squid-yaml.ts test",
+		"generate-squid-yaml:dev": "ts-node ./scripts/generate-squid-yaml.ts dev",
+		"deploy": "sqd deploy ./",
+		"deploy:production": "ts-node ./scripts/generate-squid-yaml.ts production && sqd deploy ./",
+		"deploy:stage": "ts-node ./scripts/generate-squid-yaml.ts stage && sqd deploy ./",
+		"deploy:test": "ts-node ./scripts/generate-squid-yaml.ts test && sqd deploy ./",
+		"deploy:dev": "ts-node ./scripts/generate-squid-yaml.ts dev && sqd deploy ./",
+		"serve": "sqd serve",
+		"process": "sqd process",
+		"process:clean": "sqd down && sqd up && sqd process",
+		"process:clean:log": "unbuffer npm run process:clean | tee -a log.txt"
+	},
+	"dependencies": {
+		"@polkadot/api": "^10.0.1",
+		"@polkadot/util": "^11.0.1",
+		"@subsquid/archive-registry": "3.0.1",
+		"@subsquid/graphql-server": "3.3.2",
+		"@subsquid/ss58": "^0.1.4",
+		"@subsquid/substrate-processor": "2.4.1",
+		"@subsquid/typeorm-migration": "0.1.6",
+		"@subsquid/typeorm-store": "0.2.2",
+		"bignumber.js": "^9.1.1",
+		"dotenv": "^16.0.0",
+		"pg": "8.9.0",
+		"type-fest": "^3.7.2",
+		"type-graphql": "^1.2.0-rc.1",
+		"typeorm": "0.3.11"
+	},
+	"devDependencies": {
+		"@subsquid/substrate-metadata-explorer": "1.1.2",
+		"@subsquid/substrate-typegen": "2.2.1",
+		"@subsquid/typeorm-codegen": "0.3.3",
+		"@types/js-yaml": "^4.0.6",
+		"@types/node": "18.11.18",
+		"husky": "^8.0.3",
+		"js-yaml": "^4.1.0",
+		"lint-staged": "^15.0.2",
+		"prettier": "^3.0.3",
+		"ts-node": "^10.9.1",
+		"typescript": "4.9.5"
+	},
+	"overrides": {
+		"es5-ext": "0.10.35"
+	}
+}

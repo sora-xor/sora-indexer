@@ -1,0 +1,20 @@
+/node_modules
+/lib
+/builds
+
+/**Versions.json
+/**Versions.jsonl
+
+# IDE files
+/.idea
+
+/archive/prod/cockroach-data
+/archive/stage/cockroach-data
+/archive/dev/cockroach-data
+
+typegen.json
+
+.env
+squid.yaml
+.DS_Store
+log.txt

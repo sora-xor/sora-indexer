@@ -1,0 +1,7 @@
+/.git
+/node_modules
+/lib
+/archive
+/*Versions.jsonl
+Dockerfile*
+docker-compose.yml

@@ -1,0 +1,25 @@
+{
+  "name": "subsquid-compare",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "fetch": "ts-node src/fetch.ts",
+    "process": "ts-node src/process.ts",
+    "compare": "ts-node src/compare.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^18.15.11",
+    "dotenv": "^16.0.3",
+    "graphql-request": "^5.2.0",
+    "lodash": "^4.17.21",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.3"
+  },
+  "devDependencies": {
+    "@types/lodash": "^4.14.199"
+  }
+}
