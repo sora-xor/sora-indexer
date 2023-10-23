@@ -1,0 +1,19 @@
+version: "3"
+
+services:
+  db:
+    healthcheck:
+      test: ["CMD-SHELL", "sh -c 'pg_isready -U postgres -d ${DB_NAME}'"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    container_name: subsquid_db
+    image: postgres:14
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_PASSWORD: ${DB_PASS}
+    ports:
+      - "${DB_PORT}:5432"
+      # command: ["postgres", "-c", "log_statement=all"]
+#    volumes:
+#      - ./data/db:/var/lib/postgresql/data

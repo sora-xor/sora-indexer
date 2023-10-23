@@ -1,0 +1,8 @@
+/node_modules
+/data
+
+# IDE files
+/.idea
+
+.env
+.DS_Store

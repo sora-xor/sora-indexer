@@ -1,0 +1,56 @@
+version: '2.4'
+services:
+  db:
+    image: postgres:15
+    restart: always
+    # command: start-single-node --insecure
+    volumes:
+      - ./db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+
+  ingest:
+    depends_on:
+      - db
+    restart: on-failure
+    image: subsquid/substrate-ingest:firesquid
+    volumes:
+      - "../../src/typesBundle.json:/configs/typesBundle.json"
+    command: [
+       "-e", "${NODE_NAME}",
+       "-c", "5",
+       "--out", "${DB_URL}",
+       "--types-bundle", "/configs/typesBundle.json",
+       "--write-batch-size", "10"
+    ]
+
+  gateway:
+    depends_on:
+      - db
+    image: subsquid/substrate-gateway:firesquid
+    environment:
+      RUST_LOG: "substrate_gateway=info,actix_server=info"
+    command: [
+       "--database-url", "${DB_URL}",
+       "--database-max-connections", "100",
+       "--scan-start-value", "1",
+       "--scan-max-value", "10000",
+    ]
+    ports:
+      - "8000:8000"
+
+  explorer:
+    image: subsquid/substrate-explorer:firesquid
+    environment:
+      DB_TYPE: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USERNAME}
+      DB_PASS: ${DB_PASS}
+    ports:
+      - "3000:3000"
