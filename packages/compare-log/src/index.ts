@@ -94,17 +94,17 @@ function generateSubqueryScriptAndRun() {
     
     subqueryScript.stdout.on('data', (data: Buffer) => {
       const dataString = data.toString()
-      if (logIndex === 0) {
-        console.log(chalk.blue(dataString))
-      }
+      // if (logIndex === 0) {
+      //   console.log(chalk.blue(dataString))
+      // }
       handleSubquery(dataString)
     })
 
     subqueryScript.stderr.on('data', (data: Buffer) => {
       const dataString = data.toString()
-      if (logIndex === 0) {
-        console.log(chalk.blue(dataString))
-      }
+      // if (logIndex === 0) {
+      //   console.log(chalk.blue(dataString))
+      // }
       handleSubquery(dataString)
     })
 
@@ -142,6 +142,7 @@ function handleSubsquid(data: string) {
       processLine(messageLine)
       subsquidLastLines = ''
     } else {
+      console.log(subsquidLastLines.length, line.length, index)
       subsquidLastLines = subsquidLastLines + line
       const messageLineCombined = subsquidRegex.exec(subsquidLastLines)?.[0]
       if (messageLineCombined) {

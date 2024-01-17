@@ -1,30 +1,25 @@
-import { BatchContext, SubstrateBlock } from '@subsquid/substrate-processor'
-import { CallItem as SubsquidCallItem, EventItem as SubsquidEventItem } from '@subsquid/substrate-processor/lib/interfaces/dataSelection'
+import { Block, Call as CallType, Event as EventType, DataHandlerContext, SubstrateBatchProcessor } from '@subsquid/substrate-processor'
 import { Store } from '@subsquid/typeorm-store'
 import { Opaque } from 'type-fest'
-import { calls, events } from '../consts'
+import { callNames, eventNames } from '../consts'
+import { processor } from '../processor';
 
-type EventItemUnion<U> = U extends string ? SubsquidEventItem<U, true> : never
-type CallItemUnion<U> = U extends string ? SubsquidCallItem<U, true> : never
 
-type EventObject = EventItemUnion<(typeof events)[number]>
-export type EventItemName = Exclude<EventObject['name'], '*'>
-export type EventItem<T extends EventItemName> = SubsquidEventItem<T, true>
-export type AnyEventItem = EventItem<EventItemName>
+type ExtractSubstrateBatchProcessorType<T> = T extends SubstrateBatchProcessor<infer U> ? U : never;
 
-type CallObject = CallItemUnion<(typeof calls)[number]>
-export type CallItemName = Exclude<CallObject['name'], '*'>
-export type CallItem<T extends CallItemName> = SubsquidCallItem<T, true>
-export type AnyCallItem = CallItem<CallItemName>
+type Fields = ExtractSubstrateBatchProcessorType<typeof processor>;
 
-export type EntityItemName = EventItemName | CallItemName
-export type EntityItem<T extends EntityItemName> = T extends EventItemName ? EventItem<T> : T extends CallItemName ? CallItem<T> : never
-export type AnyEntityItem = AnyEventItem | AnyCallItem
+export type CallName = typeof callNames[number]
+export type EventName = typeof eventNames[number]
 
-export type Context = BatchContext<Store, EventObject | CallObject>
-export type BlockHeader = SubstrateBlock
-export type Block = { header: BlockHeader; items: (EventObject | CallObject)[] }
-export type BlockContext = Context & { block: Block }
+export type Call<T extends CallName> = CallType<Fields>
+export type Event<T extends EventName> = EventType<Fields>
+export type Entity<T extends CallName | EventName> = T extends CallName ? Call<T> : T extends EventName ? Event<T> : never
+
+export type EntityKind = 'call' | 'event' | 'storage'
+
+export type Context = DataHandlerContext<Store, {}>
+export type BlockContext = Context & { block: Block<Fields>; now: number }
 
 export type AssetId = Opaque<string, 'AssetId'>
 export type AssetAmount = Opaque<bigint, 'AssetAmount'>

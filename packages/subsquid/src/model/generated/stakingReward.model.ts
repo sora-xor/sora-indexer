@@ -1,5 +1,6 @@
 import {Entity as Entity_, Column as Column_, PrimaryColumn as PrimaryColumn_, ManyToOne as ManyToOne_, Index as Index_} from "typeorm"
 import {StakingStaker} from "./stakingStaker.model"
+import {PayeeType} from "./_payeeType"
 import {StakingEra} from "./stakingEra.model"
 
 @Entity_()
@@ -17,6 +18,9 @@ export class StakingReward {
     @Index_()
     @ManyToOne_(() => StakingStaker, {nullable: true})
     staker!: StakingStaker
+
+    @Column_("varchar", {length: 10, nullable: false})
+    payeeType!: PayeeType
 
     @Index_()
     @Column_("text", {nullable: true})

@@ -1,13 +1,21 @@
 {
   "cSpell.words": [
+	"codegen",
+	"consts",
+	"Invulnerables",
 	"iroha",
 	"Mintable",
 	"Multicollateral",
+	"prefs",
 	"pswap",
+	"Rebond",
 	"staker",
 	"subquery",
 	"subsquid",
 	"txid",
+	"Unbond",
+	"Unbonded",
+	"Unstake",
 	"xorless"
 ],
 "editor.detectIndentation": false

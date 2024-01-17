@@ -1,5 +1,8 @@
 import { getEventId } from '.'
-import { Block, BlockContext, CallItem, Context, EventItem } from '../types'
+import { performanceLogMinTime, performanceLogMode, testLogMode } from '../config'
+import { BlockContext, Call, Event } from '../types'
+
+let lastLogNow = performance.now()
 
 function toPascalCase(str: string): string {
 	return str
@@ -17,9 +20,19 @@ function toPascalCase(str: string): string {
 		.replace(/(^|\.)\w/g, (match) => match.toUpperCase()) // Capitalize the first character of each segment
 }
 
-export function getLog(ctx: Context & { block: Block }, logModule: string | null = null, attrs: Record<string, any> = {}) {
+export function getLog(ctx: BlockContext, logModule: string | null = null, attrs: Record<string, any> = {}, testMode: boolean = false) {
 	const blockHeight = ctx.block.header.height
 	const attributes: any = { blockHeight, ...attrs }
+	if (performanceLogMode) {
+		const now = performance.now()
+		const timeFromLastLog = now - lastLogNow
+		const timeFromBlockStart = now - ctx.now
+		if (timeFromLastLog > performanceLogMinTime) {
+			attributes['timeFromLastLog'] = timeFromLastLog.toFixed(2) + 'ms'
+			attributes['timeFromBlockStart'] = timeFromBlockStart.toFixed(2) + 'ms'
+		}
+		lastLogNow = now
+	}
 
 	const log = (level: 'debug' | 'info' | 'warn' | 'error') => (arg1: Record<string, any> | string, arg2?: string) => {
 		let attrs: Record<string, any> = {}
@@ -37,72 +50,90 @@ export function getLog(ctx: Context & { block: Block }, logModule: string | null
 		ctx.log[level](attrs, `[${logModule}] ${message}`)
 	}
 
+	const sendMessages = testMode ? testLogMode : true
+
 	return {
-		debug: log('debug'),
-		info: log('info'),
-		warn: log('warn'),
-		error: log('error'),
+		debug: sendMessages ? log('debug') : () => {},
+		info: sendMessages ? log('info') : () => {},
+		warn: sendMessages ? log('warn') : () => {},
+		error: sendMessages ? log('error') : () => {},
 	}
 }
 
-export function getCallHandlerLog(ctx: BlockContext, callItem: CallItem<any>) {
-	const extrinsicHash = callItem.extrinsic.hash
-	const callName = toPascalCase(callItem.name)
+export function getCallHandlerLog(ctx: BlockContext, call: Call<any>, testMode: boolean = false) {
+	const extrinsicHash = call.extrinsic?.hash ?? null
+	const callName = toPascalCase(call.name)
 	const attributes = { extrinsicHash, callName }
-	return getLog(ctx, 'CallHandler', attributes)
+	return getLog(ctx, 'CallHandler', attributes, testMode)
 }
 
-export function getEventHandlerLog(ctx: BlockContext, eventItem: EventItem<any>) {
-	const extrinsicHash = eventItem.event.extrinsic?.hash ?? null
-	const eventName = toPascalCase(eventItem.name)
-	const eventId = getEventId(ctx, eventItem)
+export function getEventHandlerLog(ctx: BlockContext, event: Event<any>, testMode: boolean = false) {
+	const extrinsicHash = event.extrinsic?.hash ?? null
+	const eventName = toPascalCase(event.name)
+	const eventId = getEventId(ctx, event)
 	const attributes: any = { eventName, eventId }
 	if (extrinsicHash) {
 		attributes['extrinsicHash'] = extrinsicHash
 	}
-	return getLog(ctx, 'EventHandler', attributes)
+	return getLog(ctx, 'EventHandler', attributes, testMode)
 }
 
-export function getInitializeAssetsLog(ctx: BlockContext) {
-	return getLog(ctx, 'InitializeAssets')
+export function getInitializeAssetsLog(ctx: BlockContext, testMode: boolean = false) {
+	return getLog(ctx, 'InitializeAssets', {}, testMode)
 }
 
-export function getInitializePoolsLog(ctx: BlockContext) {
-	return getLog(ctx, 'InitializePools')
+export function getInitializePoolsLog(ctx: BlockContext, testMode: boolean = false) {
+	return getLog(ctx, 'InitializePools', {}, testMode)
 }
 
-export function getSyncModelsLog(ctx: BlockContext) {
-	return getLog(ctx, 'SyncModels')
+export function getInitializeOrderBooksLog(ctx: BlockContext, testMode: boolean = false) {
+	return getLog(ctx, 'InitializeOrderBooks', {}, testMode)
 }
 
-export function getSyncPricesLog(ctx: BlockContext) {
-	return getLog(ctx, 'SyncPrices')
+export function getSyncModelsLog(ctx: BlockContext, testMode: boolean = false) {
+	return getLog(ctx, 'SyncModels', {}, testMode)
 }
 
-export function getAssetStorageLog(ctx: BlockContext) {
-	return getLog(ctx, 'AssetStorage')
+export function getSyncPricesLog(ctx: BlockContext, testMode: boolean = false) {
+	return getLog(ctx, 'SyncPrices', {}, testMode)
 }
 
-export function getAssetSnapshotsStorageLog(ctx: BlockContext) {
-	return getLog(ctx, 'AssetSnapshotsStorage')
+export function getAssetStorageLog(ctx: BlockContext, testMode: boolean = false) {
+	return getLog(ctx, 'AssetStorage', {}, testMode)
 }
 
-export function getNetworkSnapshotsStorageLog(ctx: BlockContext) {
-	return getLog(ctx, 'NetworkSnapshotsStorage')
+export function getAssetSnapshotsStorageLog(ctx: BlockContext, testMode: boolean = false) {
+	return getLog(ctx, 'AssetSnapshotsStorage', {}, testMode)
 }
 
-export function getPoolsStorageLog(ctx: BlockContext) {
-	return getLog(ctx, 'PoolsStorage')
+export function getNetworkSnapshotsStorageLog(ctx: BlockContext, testMode: boolean = false) {
+	return getLog(ctx, 'NetworkSnapshotsStorage', {}, testMode)
 }
 
-export function getUtilsLog(ctx: BlockContext) {
-	return getLog(ctx, 'Utils')
+export function getOrderBooksSnapshotsStorageLog(ctx: BlockContext, testMode: boolean = false) {
+	return getLog(ctx, 'OrderBooksSnapshotsStorage', {}, testMode)
 }
 
-export function logStartProcessingCall(ctx: BlockContext, callItem: CallItem<any>) {
+export function getPoolsStorageLog(ctx: BlockContext, testMode: boolean = false) {
+	return getLog(ctx, 'PoolsStorage', {}, testMode)
+}
+
+export function getOrderBooksStorageLog(ctx: BlockContext, testMode: boolean = false) {
+	return getLog(ctx, 'OrderBooksStorage', {}, testMode)
+}
+
+export function getUtilsLog(ctx: BlockContext, testMode: boolean = false) {
+	return getLog(ctx, 'Utils', {}, testMode)
+}
+
+export function getStreamLog(ctx: BlockContext, testMode: boolean = false) {
+	return getLog(ctx, 'Stream', {}, testMode)
+}
+
+export function logStartProcessingCall(ctx: BlockContext, callItem: Call<any>) {
 	return getCallHandlerLog(ctx, callItem).debug('Start processing the call')
 }
 
-export function logStartProcessingEvent(ctx: BlockContext, eventItem: EventItem<any>) {
+export function logStartProcessingEvent(ctx: BlockContext, eventItem: Event<any>) {
 	return getEventHandlerLog(ctx, eventItem).debug('Start processing the event')
 }

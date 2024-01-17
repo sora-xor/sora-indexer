@@ -42,45 +42,49 @@ export const createHistoryElement = async (
     const type = 'event' in ctx ? HistoryElementType.EVENT : HistoryElementType.CALL;
 	const extrinsic = 'event' in ctx ? ctx.extrinsic : ctx
 
-	const historyElement = new HistoryElement(getEntityId(ctx))
-	historyElement.type = type
-	historyElement.blockHeight = extrinsic.block.block.header.number.toNumber()
-	historyElement.blockHash = extrinsic.block.block.header.hash.toString()
-	historyElement.module = extrinsic.extrinsic.method.section
-	historyElement.method = extrinsic.extrinsic.method.method
-	historyElement.address = extrinsic.extrinsic.signer.toString()
-	historyElement.networkFee = getExtrinsicNetworkFee(extrinsic)
-	historyElement.timestamp = formatDateTimestamp(extrinsic.block.timestamp)
-	historyElement.updatedAtBlock =historyElement.blockHeight
-	historyElement.callNames = []
-
     let failedEvent = extrinsic.events.find(e => e.event.method === 'ExtrinsicFailed');
+    let historyExecution!: any;
 
     if (failedEvent) {
-        historyElement.execution = {
+        historyExecution = {
             success: false
         }
         const { event: { data: [error] } } = failedEvent
         if ((error as any).isModule) {
-            historyElement.execution.error = {
+            historyExecution.error = {
                 // tricky way to get int
                 moduleErrorId: (error as any).asModule.error.toU8a()[0],
                 moduleErrorIndex: (error as any).asModule.index.toU8a()[0],
             }
         } else {
             // Other, CannotLookup, BadOrigin, no extra info
-            historyElement.execution.error = {
+            historyExecution.error = {
                 nonModuleErrorMessage: error.toString()
             }
         }
     } else {
-        historyElement.execution = {
+        historyExecution = {
             success: true
         }
     }
 
+	const historyElement = new HistoryElement(
+        getEntityId(ctx),
+        type,
+        extrinsic.block.block.header.number.toNumber(),
+        extrinsic.block.block.header.hash.toString(),
+        extrinsic.extrinsic.method.section,
+        extrinsic.extrinsic.method.method,
+        extrinsic.extrinsic.signer.toString(),
+        getExtrinsicNetworkFee(extrinsic),
+        historyExecution,
+        formatDateTimestamp(extrinsic.block.timestamp),
+        [],
+        extrinsic.block.block.header.number.toNumber(),
+    )
+
 	await historyElement.save()
-	const { callNames, execution, ...logArguments } = historyElement
+	const { callNames, execution, data: details, ...logArguments } = historyElement
 	getUtilsLog(ctx).debug({ ...logArguments, executionSuccess: execution.success }, 'Created history element')
 
 	if (data) {
@@ -119,7 +123,6 @@ export const addCallsToHistoryElement = async (extrinsic: SubstrateExtrinsic, hi
 
 export const updateHistoryElementStats = async (extrinsic: SubstrateExtrinsic, history: HistoryElement) => {
   const addresses = [history.address.toString()];
-  const timestamp = history.timestamp;
 
   if (
       INCOMING_TRANSFER_METHODS.includes(history.method.toString()) &&
@@ -132,11 +135,11 @@ export const updateHistoryElementStats = async (extrinsic: SubstrateExtrinsic, h
   getUtilsLog(extrinsic).debug({ addresses: addresses.join(', ') }, 'addresses');
   // update accounts data
   for (const address of addresses) {
-      const account = await getAccountEntity(extrinsic, address, timestamp);
+      const account = await getAccountEntity(extrinsic.block, address);
       account.latestHistoryElementId = history.id.toString();
       await account.save();
   }
 
-  await networkSnapshotsStorage.updateTransactionsStats(extrinsic.block, timestamp);
+  await networkSnapshotsStorage.updateTransactionsStats(extrinsic.block);
   getUtilsLog(extrinsic).debug('Updated history element stats');
 }

@@ -2,11 +2,10 @@ import BigNumber from 'bignumber.js'
 
 import { SnapshotType, NetworkSnapshot, NetworkStats } from '../model'
 import { AssetAmount, BlockContext } from '../types'
-import { getSnapshotIndex } from './index'
-import { formatDateTimestamp } from '.'
+import { getBlockTimestamp, getSnapshotIndex, getSnapshotTypes } from './index'
 import { getNetworkSnapshotsStorageLog } from './logs'
 
-export const NetworkSnapshots = [SnapshotType.HOUR, SnapshotType.DAY, SnapshotType.MONTH]
+const NetworkSnapshots = [SnapshotType.HOUR, SnapshotType.DAY, SnapshotType.MONTH]
 
 const NetworkStatsId = '0'
 
@@ -72,7 +71,7 @@ class NetworkSnapshotsStorage {
 
 		for (const snapshot of this.storage.values()) {
 			const { type, timestamp } = snapshot
-			const blockTimestamp = formatDateTimestamp(new Date(ctx.block.header.timestamp))
+			const blockTimestamp = getBlockTimestamp(ctx)
 			const { timestamp: currentTimestamp } = getSnapshotIndex(blockTimestamp, type)
 
 			if (currentTimestamp > timestamp) {
@@ -88,7 +87,7 @@ class NetworkSnapshotsStorage {
 	}
 
 	async getSnapshot(ctx: BlockContext, type: SnapshotType): Promise<NetworkSnapshot> {
-		const blockTimestamp = formatDateTimestamp(new Date(ctx.block.header.timestamp))
+		const blockTimestamp = getBlockTimestamp(ctx)
 		const { index, timestamp } = getSnapshotIndex(blockTimestamp, type)
 		const id = NetworkSnapshotsStorage.getId(type, index)
 
@@ -125,7 +124,9 @@ class NetworkSnapshotsStorage {
 		stats.totalAccounts = stats.totalAccounts + 1
 		stats.updatedAtBlock = ctx.block.header.height
 
-		for (const type of NetworkSnapshots) {
+		const snapshotTypes = getSnapshotTypes(ctx, NetworkSnapshots)
+
+    	for (const type of snapshotTypes) {
 			const snapshot = await this.getSnapshot(ctx, type)
 
 			snapshot.accounts = snapshot.accounts + 1
@@ -140,7 +141,9 @@ class NetworkSnapshotsStorage {
 		stats.totalTransactions = stats.totalTransactions + 1
 		stats.updatedAtBlock = ctx.block.header.height
 
-		for (const type of NetworkSnapshots) {
+		const snapshotTypes = getSnapshotTypes(ctx, NetworkSnapshots)
+
+    	for (const type of snapshotTypes) {
 			const snapshot = await this.getSnapshot(ctx, type)
 
 			snapshot.transactions = snapshot.transactions + 1
@@ -155,7 +158,9 @@ class NetworkSnapshotsStorage {
 		stats.totalBridgeIncomingTransactions = stats.totalBridgeIncomingTransactions + 1
 		stats.updatedAtBlock = ctx.block.header.height
 
-		for (const type of NetworkSnapshots) {
+		const snapshotTypes = getSnapshotTypes(ctx, NetworkSnapshots)
+
+    	for (const type of snapshotTypes) {
 			const snapshot = await this.getSnapshot(ctx, type)
 
 			snapshot.bridgeIncomingTransactions = snapshot.bridgeIncomingTransactions + 1
@@ -170,7 +175,9 @@ class NetworkSnapshotsStorage {
 		stats.totalBridgeOutgoingTransactions = stats.totalBridgeOutgoingTransactions + 1
 		stats.updatedAtBlock = ctx.block.header.height
 
-		for (const type of NetworkSnapshots) {
+		const snapshotTypes = getSnapshotTypes(ctx, NetworkSnapshots)
+
+    	for (const type of snapshotTypes) {
 			const snapshot = await this.getSnapshot(ctx, type)
 
 			snapshot.bridgeOutgoingTransactions = snapshot.bridgeOutgoingTransactions + 1
@@ -185,7 +192,9 @@ class NetworkSnapshotsStorage {
 		stats.totalFees = stats.totalFees + fee
 		stats.updatedAtBlock = ctx.block.header.height
 
-		for (const type of NetworkSnapshots) {
+		const snapshotTypes = getSnapshotTypes(ctx, NetworkSnapshots)
+
+    	for (const type of snapshotTypes) {
 			const snapshot = await this.getSnapshot(ctx, type)
 
 			snapshot.fees = snapshot.fees + fee
@@ -195,7 +204,10 @@ class NetworkSnapshotsStorage {
 
 	async updateLiquidityStats(ctx: BlockContext, liquiditiesUSD: BigNumber): Promise<void> {
 		getNetworkSnapshotsStorageLog(ctx).debug({ liquiditiesUSD }, 'Update liquidity stats in network snapshots')
-		for (const type of NetworkSnapshots) {
+		
+		const snapshotTypes = getSnapshotTypes(ctx, NetworkSnapshots)
+
+    	for (const type of snapshotTypes) {
 			const snapshot = await this.getSnapshot(ctx, type)
 
 			snapshot.liquidityUSD = liquiditiesUSD.toFixed(2)
@@ -205,7 +217,10 @@ class NetworkSnapshotsStorage {
 
 	async updateVolumeStats(ctx: BlockContext, volumeUSD: BigNumber): Promise<void> {
 		getNetworkSnapshotsStorageLog(ctx).debug({ volumeUSD }, 'Update volume stats in network snapshot')
-		for (const type of NetworkSnapshots) {
+
+		const snapshotTypes = getSnapshotTypes(ctx, NetworkSnapshots)
+
+    	for (const type of snapshotTypes) {
 			const snapshot = await this.getSnapshot(ctx, type)
 
 			snapshot.volumeUSD = new BigNumber(snapshot.volumeUSD).plus(volumeUSD).toFixed(2)

@@ -1,16 +1,18 @@
-import { BlockContext, EventItem } from '../../types'
+import { BlockContext, Event } from '../../types'
 
 import { getAssetsTransferEventData } from '../../utils/events'
 import { getEventHandlerLog, logStartProcessingEvent } from '../../utils/logs'
 import { poolAccounts, poolsStorage, PoolsPrices } from '../../utils/pools'
+import { orderBooksStorage } from '../../utils/orderBook'
+import { assertDefined } from '../../utils'
 
 export async function transferEventHandler(
 	ctx: BlockContext,
-	eventItem: EventItem<'Tokens.Transfer'> | EventItem<'Balances.Transfer'>,
+	event: Event<'Tokens.Transfer'> | Event<'Balances.Transfer'>,
 ): Promise<void> {
-	logStartProcessingEvent(ctx, eventItem)
+	logStartProcessingEvent(ctx, event)
 
-	const { assetId, from, to, amount } = getAssetsTransferEventData(ctx, eventItem)
+	const { assetId, from, to, amount } = getAssetsTransferEventData(ctx, event)
 
 	// withdraw token from pool
 	if (poolAccounts.has(from)) {
@@ -24,7 +26,7 @@ export async function transferEventHandler(
 			pool.targetAssetReserves = pool.targetAssetReserves - amount
 		}
 
-		getEventHandlerLog(ctx, eventItem).debug({ poolId: pool.id }, 'Pool information saved after withdrawal')
+		getEventHandlerLog(ctx, event).debug({ poolId: pool.id }, 'Pool information saved after withdrawal')
 		PoolsPrices.set(true)
 	}
 
@@ -40,7 +42,36 @@ export async function transferEventHandler(
 			pool.targetAssetReserves = pool.targetAssetReserves + amount
 		}
 
-		getEventHandlerLog(ctx, eventItem).debug({ poolId: pool.id }, 'Pool information saved after deposit')
+		getEventHandlerLog(ctx, event).debug({ poolId: pool.id }, 'Pool information saved after deposit')
 		PoolsPrices.set(true)
+	}
+
+	// withdraw token from order book
+	if (orderBooksStorage.accountIds.has(from)) {
+		const book = await orderBooksStorage.getOrderBookByAccountId(ctx, from)
+
+		assertDefined(book)
+	
+		if (book.baseAsset.id === assetId) {
+			book.baseAssetReserves = book.baseAssetReserves - BigInt(amount)
+		} else if (book.quoteAsset.id === assetId) {
+			book.quoteAssetReserves = book.quoteAssetReserves - BigInt(amount)
+		}
+	
+		getEventHandlerLog(ctx, event).debug({ id: book.id }, 'Order Book information saved after withdrawal')
+	}
+	// deposit token to order book
+	if (orderBooksStorage.accountIds.has(to)) {
+		const book = await orderBooksStorage.getOrderBookByAccountId(ctx, to)
+
+		assertDefined(book)
+	
+		if (book.baseAsset.id === assetId) {
+			book.baseAssetReserves = book.baseAssetReserves + BigInt(amount)
+		} else if (book.quoteAsset.id === assetId) {
+			book.quoteAssetReserves = book.quoteAssetReserves + BigInt(amount)
+		}
+	
+		getEventHandlerLog(ctx, event).debug({ id: book.id }, 'Order Book information saved after deposit')
 	}
 }

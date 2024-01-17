@@ -1,16 +1,16 @@
-import { addDataToHistoryElement, createHistoryElement, updateHistoryElementStats } from '../../utils/history'
+import { addDataToHistoryElement, createCallHistoryElement, updateHistoryElementStats } from '../../utils/history'
 import { formatU128ToBalance, getAssetId } from '../../utils/assets'
-import { BlockContext, AssetAmount, CallItem } from '../../types'
+import { BlockContext, AssetAmount, Call } from '../../types'
 import { findEventByExtrinsicHash } from '../../utils/events'
-import { CurrenciesDepositedEvent, CurrenciesTransferredEvent } from '../../types/generated/events'
-import { getEntityData } from '../../utils/entities'
+import { getEventData } from '../../utils/entities'
 import { logStartProcessingCall } from '../../utils/logs'
+import { events } from '../../types/generated/merged'
+import { assertDefined } from '../../utils'
 
-export async function irohaMigrationCallHandler(ctx: BlockContext, callItem: CallItem<'IrohaMigration.migrate'>): Promise<void> {
-	logStartProcessingCall(ctx, callItem)
+export async function irohaMigrationCallHandler(ctx: BlockContext, call: Call<'IrohaMigration.migrate'>): Promise<void> {
+	logStartProcessingCall(ctx, call)
 
-	const historyElement = await createHistoryElement(ctx, callItem)
-	const extrinsicHash = callItem.extrinsic.hash
+	const historyElement = await createCallHistoryElement(ctx, call)
 
 	let details: {
 		assetId: string
@@ -18,12 +18,12 @@ export async function irohaMigrationCallHandler(ctx: BlockContext, callItem: Cal
 	} | null = null
 
 	if (historyElement.execution.success) {
-		const currenciesDepositedEventItem = findEventByExtrinsicHash(ctx, extrinsicHash, ['Currencies.Deposited'])
-		const currenciesTransferredEventItem = findEventByExtrinsicHash(ctx, extrinsicHash, ['Currencies.Transferred'])
+		assertDefined(call.extrinsic)
+		const currenciesDepositedEvent = findEventByExtrinsicHash(ctx, call.extrinsic.hash, ['Currencies.Deposited'])
+		const currenciesTransferredEvent = findEventByExtrinsicHash(ctx, call.extrinsic.hash, ['Currencies.Transferred'])
 
-		if (currenciesDepositedEventItem) {
-			const event = new CurrenciesDepositedEvent(ctx, currenciesDepositedEventItem.event)
-			const data = getEntityData(ctx, event, currenciesDepositedEventItem)
+		if (currenciesDepositedEvent) {
+			const data = getEventData(ctx, events.currencies.deposited, currenciesDepositedEvent)
 
 			const assetId = getAssetId(data[0])
 			const assetAmount = data[2] as AssetAmount
@@ -33,9 +33,8 @@ export async function irohaMigrationCallHandler(ctx: BlockContext, callItem: Cal
 				assetId,
 				amount,
 			}
-		} else if (currenciesTransferredEventItem) {
-			const event = new CurrenciesTransferredEvent(ctx, currenciesTransferredEventItem.event)
-			const data = getEntityData(ctx, event, currenciesTransferredEventItem)
+		} else if (currenciesTransferredEvent) {
+			const data = getEventData(ctx, events.currencies.transferred, currenciesTransferredEvent)
 
 			const assetId = getAssetId(data[0])
 			const assetAmount = data[3] as AssetAmount

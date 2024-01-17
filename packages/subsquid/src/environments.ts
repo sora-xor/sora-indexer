@@ -16,7 +16,8 @@ interface EnvironmentAddresses {
 	description: string
 	version: number
 	chain: string
-	archive: string
+	archive: string | null
+	storage: string
 	scaleProfiles: {
 		postgres: ScaleProfile
 		processor: ScaleProfile
@@ -28,7 +29,7 @@ type Environments = {
 	[environment in Environment]: EnvironmentAddresses
 }
 
-const version = 3
+const version = 4
 
 export const environments: Environments = {
 	[Environment.PRODUCTION]: {
@@ -36,7 +37,8 @@ export const environments: Environments = {
 		description: 'Sora squid',
 		version,
 		chain: 'wss://mof2.sora.org',
-		archive: 'https://sora.archive.subsquid.io/graphql',
+		archive: 'sora',
+		storage: '100G',
 		scaleProfiles: {
 			postgres: ScaleProfile.LARGE,
 			processor: ScaleProfile.LARGE,
@@ -48,7 +50,8 @@ export const environments: Environments = {
 		description: 'Sora stage squid',
 		version,
 		chain: 'wss://ws.framenode-7.s4.stg1.sora2.soramitsu.co.jp',
-		archive: 'https://sora-testnet.archive.subsquid.io/graphql',
+		archive: null,
+		storage: '100G',
 		scaleProfiles: {
 			postgres: ScaleProfile.SMALL,
 			processor: ScaleProfile.SMALL,
@@ -60,7 +63,8 @@ export const environments: Environments = {
 		description: 'Sora test squid',
 		version: 1,
 		chain: 'wss://ws.framenode-1.v1.tst.sora2.soramitsu.co.jp',
-		archive: 'https://subsquid.sq1.tst.sora2.soramitsu.co.jp/graphql',
+		archive: null,
+		storage: '100G',
 		scaleProfiles: {
 			postgres: ScaleProfile.SMALL,
 			processor: ScaleProfile.SMALL,
@@ -72,7 +76,8 @@ export const environments: Environments = {
 		description: 'Sora dev squid',
 		version: 1,
 		chain: 'wss://ws.framenode-2.r0.dev.sora2.soramitsu.co.jp',
-		archive: 'https://subsquid.sq1.dev.sora2.soramitsu.co.jp/graphql',
+		archive: null,
+		storage: '10G',
 		scaleProfiles: {
 			postgres: ScaleProfile.SMALL,
 			processor: ScaleProfile.SMALL,

@@ -1,12 +1,14 @@
 import { PoolXYK } from '../model'
 import { AssetAmount, BlockContext } from '../types'
-import { PoolXYKReservesStorage, PoolXYKPropertiesStorage } from '../types/generated/storage'
 import { XOR, DOUBLE_PRICE_POOL } from './consts'
-import { decodeAssetId, toAddress } from '.'
+import { assertDefined, toAddress, toAssetId } from '.'
 import { AssetId, Address } from '../types'
-import { getEntityData } from './entities'
-import { assetStorage, getAssetId } from './assets'
+import { getStorageRepresentation } from './entities'
+import { assetStorage, getAssetId, assetPrecisions } from './assets'
 import { getInitializePoolsLog, getPoolsStorageLog } from './logs'
+import { storage } from '../types/generated/merged'
+import { poolXykApyUpdatesStream } from './stream'
+import BigNumber from 'bignumber.js'
 
 // getters & setter for flag, should we sync poolXYK reserves
 // and then calc asset prices
@@ -23,16 +25,20 @@ export const PoolsPrices = {
 export const getAllReserves = async (ctx: BlockContext, baseAssetId: AssetId) => {
 	try {
 		getInitializePoolsLog(ctx).debug({ baseAssetId }, 'Pools XYK Reserves request...')
-		const storage = new PoolXYKReservesStorage(ctx, ctx.block.header)
-		const data = storage.isV1
-			? await getEntityData(ctx, storage, { kind: 'storage', name: PoolXYKReservesStorage.name }, ['42'] as const).getPairs(
-					decodeAssetId(baseAssetId),
-			  )
-			: await getEntityData(ctx, storage, { kind: 'storage', name: PoolXYKReservesStorage.name }, ['1'] as const).getPairs({
-					code: decodeAssetId(baseAssetId),
-			  })
+		const data = storage.poolXyk.reserves.v1.is(ctx.block.header)
+			? await getStorageRepresentation(ctx, storage.poolXyk.reserves, ['42'] as const)?.getPairs(
+				ctx.block.header,
+				baseAssetId,
+			)
+			: await getStorageRepresentation(ctx, storage.poolXyk.reserves, ['1'] as const)?.getPairs(
+				ctx.block.header,
+				{ code: baseAssetId },
+			)
+
+		assertDefined(data)
 
 		const reserves = data.map((pair) => {
+			assertDefined(pair[1])
 			const [[, targetAssetId], [baseBalance, targetBalance]] = pair
 			return {
 				baseAssetId,
@@ -55,29 +61,23 @@ export const getAllReserves = async (ctx: BlockContext, baseAssetId: AssetId) =>
 export const getAllProperties = async (ctx: BlockContext, baseAssetId: AssetId) => {
 	try {
 		getInitializePoolsLog(ctx).debug({ baseAssetId }, 'Pools XYK Properties request...')
-		const storage = new PoolXYKPropertiesStorage(ctx, ctx.block.header)
 		const data =
-			storage.isV1 || storage.isV7
-				? await getEntityData(
-						ctx,
-						storage,
-						{
-							kind: 'storage',
-							name: PoolXYKPropertiesStorage.name,
-						},
-						['42'] as const,
-				  ).getPairs(decodeAssetId(baseAssetId))
-				: await getEntityData(
-						ctx,
-						storage,
-						{
-							kind: 'storage',
-							name: PoolXYKPropertiesStorage.name,
-						},
-						['1', '7'] as const,
-				  ).getPairs({ code: decodeAssetId(baseAssetId) })
+			storage.poolXyk.properties.v1.is(ctx.block.header) || storage.poolXyk.properties.v7.is(ctx.block.header)
+				? await getStorageRepresentation(
+					ctx,
+					storage.poolXyk.properties,
+					['42'] as const,
+				)?.getPairs(ctx.block.header, baseAssetId)
+				: await getStorageRepresentation(
+					ctx,
+					storage.poolXyk.properties,
+					['1', '7'] as const,
+				)?.getPairs(ctx.block.header, { code: baseAssetId })
+
+		assertDefined(data)
 
 		const properties = data.map((pair) => {
+			assertDefined(pair[1])
 			const [[, targetAssetId], [reservesAccountId, feesAccountId]] = pair
 			return {
 				baseAssetId,
@@ -101,29 +101,23 @@ export const getPoolProperties = async (ctx: BlockContext, baseAssetId: AssetId,
 
 	try {
 		getInitializePoolsLog(ctx).debug({ baseAssetId, targetAssetId }, 'Pool properties request...')
-		const storage = new PoolXYKPropertiesStorage(ctx, ctx.block.header)
 		const data =
-			storage.isV1 || storage.isV7
-				? await getEntityData(
-						ctx,
-						storage,
-						{
-							kind: 'storage',
-							name: PoolXYKPropertiesStorage.name,
-						},
-						['42'] as const,
-				  ).getPairs(decodeAssetId(baseAssetId), decodeAssetId(targetAssetId))
-				: await getEntityData(
-						ctx,
-						storage,
-						{
-							kind: 'storage',
-							name: PoolXYKPropertiesStorage.name,
-						},
-						['1', '7'] as const,
-				  ).getPairs({ code: decodeAssetId(baseAssetId) }, { code: decodeAssetId(targetAssetId) })
+			storage.poolXyk.properties.v1.is(ctx.block.header) || storage.poolXyk.properties.v7.is(ctx.block.header)
+				? await getStorageRepresentation(
+					ctx,
+					storage.poolXyk.properties,
+					['42'] as const,
+				)?.getPairs(ctx.block.header, baseAssetId, targetAssetId)
+				: await getStorageRepresentation(
+					ctx,
+					storage.poolXyk.properties,
+					['1', '7'] as const,
+				)?.getPairs(ctx.block.header, { code: baseAssetId }, { code: targetAssetId })
+
+		assertDefined(data)
 
 		const properties = data.map((pair) => {
+			assertDefined(pair[1])
 			const [reservesAccountId, feesAccountId] = pair[1]
 			return {
 				reservesAccountId: toAddress(reservesAccountId),
@@ -272,6 +266,49 @@ class PoolsStorage {
 		this.storage.set(poolId, pool)
 
 		return pool
+	}
+
+
+
+	public async getLockedLiquidityUSD(ctx: BlockContext): Promise<BigNumber> {
+		const lockedAssets = new Map<AssetId, bigint>()
+	
+		for (const { baseAsset, targetAsset, baseAssetReserves, targetAssetReserves } of this.storage.values()) {
+		  const a = lockedAssets.get(toAssetId(baseAsset.id))
+		  const b = lockedAssets.get(toAssetId(targetAsset.id))
+	
+		  lockedAssets.set(toAssetId(baseAsset.id), (a || BigInt(0)) + baseAssetReserves)
+		  lockedAssets.set(toAssetId(targetAsset.id), (b || BigInt(0)) + targetAssetReserves)
+		}
+	
+		let lockedUSD = new BigNumber(0)
+	
+		// update locked luqidity for assets
+		for (const [assetId, liquidity] of lockedAssets.entries()) {
+		  const asset = await assetStorage.updateLiquidity(ctx, assetId, liquidity)
+		  const precision = assetPrecisions.get(toAssetId(asset.id))
+		  assertDefined(asset.liquidity)
+		  assertDefined(precision)
+		  const assetLockedUSD = new BigNumber(asset.liquidity.toString())
+			.multipliedBy(new BigNumber(asset.priceUSD))
+			.dividedBy(Math.pow(10, precision))
+	
+		  lockedUSD = lockedUSD.plus(assetLockedUSD)
+		}
+	
+		return lockedUSD
+	  }
+
+	async updateApy(ctx: BlockContext, id: Address, strategicBonusApy: string): Promise<void> {
+	  const pool = await this.getPoolById(ctx, id)
+
+	  assertDefined(pool)
+  
+	  if (pool.strategicBonusApy === strategicBonusApy) return
+  
+	  pool.strategicBonusApy = strategicBonusApy
+	  // stream update
+	  poolXykApyUpdatesStream.update(id, strategicBonusApy)
 	}
 }
 

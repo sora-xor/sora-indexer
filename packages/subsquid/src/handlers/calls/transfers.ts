@@ -1,21 +1,19 @@
-import { addDataToHistoryElement, createHistoryElement, updateHistoryElementStats } from '../../utils/history'
+import { addDataToHistoryElement, createCallHistoryElement, updateHistoryElementStats } from '../../utils/history'
 import { formatU128ToBalance, getAssetId } from '../../utils/assets'
-import { BlockContext, CallItem } from '../../types'
-import { AssetsTransferCall, LiquidityProxyXorlessTransferCall } from '../../types/generated/calls'
-import { toAddress, toText } from '../../utils'
-import { getEntityData } from '../../utils/entities'
-import { getCallHandlerLog, logStartProcessingCall } from '../../utils/logs'
+import { BlockContext, Call } from '../../types'
+import { assertDefined, toAddress } from '../../utils'
+import { getCallData, getEventData } from '../../utils/entities'
+import { logStartProcessingCall } from '../../utils/logs'
 import { getExtrinsicSigner } from '../../utils/calls'
 import { findEventByExtrinsicHash } from '../../utils/events'
-import { LiquidityProxyExchangeEvent } from '../../types/generated/events'
 import { XOR } from '../../utils/consts'
 import BigNumber from 'bignumber.js'
+import { calls, events } from '../../types/generated/merged'
 
-export async function assetTransferCallHandler(ctx: BlockContext, callItem: CallItem<'Assets.transfer'>): Promise<void> {
-	logStartProcessingCall(ctx, callItem)
+export async function assetTransferCallHandler(ctx: BlockContext, call: Call<'Assets.transfer'>): Promise<void> {
+	logStartProcessingCall(ctx, call)
 
-	const call = new AssetsTransferCall(ctx, callItem.call)
-	const data = getEntityData(ctx, call, callItem)
+	const data = getCallData(ctx, calls.assets.transfer, call)
 
 	const to = toAddress(data.to)
 	const assetId = getAssetId(data.assetId)
@@ -24,40 +22,39 @@ export async function assetTransferCallHandler(ctx: BlockContext, callItem: Call
 	const details: any = {
 		assetId,
 		amount: formatU128ToBalance(amount, assetId),
-		from: getExtrinsicSigner(ctx, callItem),
+		from: getExtrinsicSigner(ctx, call),
 		to,
 	}
 
-	await createHistoryElement(ctx, callItem, details)
+	await createCallHistoryElement(ctx, call, details)
 }
 
-export async function xorlessTransferHandler(ctx: BlockContext, callItem: CallItem<'LiquidityProxy.xorless_transfer'>): Promise<void> {
-	logStartProcessingCall(ctx, callItem)
+export async function xorlessTransferHandler(ctx: BlockContext, call: Call<'LiquidityProxy.xorless_transfer'>): Promise<void> {
+	logStartProcessingCall(ctx, call)
 
-	const call = new LiquidityProxyXorlessTransferCall(ctx, callItem.call)
-	const data = getEntityData(ctx, call, callItem)
+	const data = getCallData(ctx, calls.liquidityProxy.xorlessTransfer, call)
 
 	const { receiver, amount, additionalData } = data
 
-	const historyElement = await createHistoryElement(ctx, callItem)
+	const historyElement = await createCallHistoryElement(ctx, call)
 	const assetId = getAssetId(data.assetId)
 	const xorFee = historyElement.networkFee!
 
 	const details: any = {
 		assetId,
 		amount: formatU128ToBalance(amount, assetId),
-		from: getExtrinsicSigner(ctx, callItem),
+		from: getExtrinsicSigner(ctx, call),
 		to: toAddress(receiver),
-		comment: additionalData ? toText(additionalData) : null,
+		comment: additionalData,
 		assetFee: '0', // fee paid in asset
 		xorFee, // fee paid in XOR (by default 100% of network fee)
 	}
 
 	if (historyElement.execution.success) {
-		const exchangeEventItem = findEventByExtrinsicHash(ctx, callItem.extrinsic.hash, ['LiquidityProxy.Exchange'])
-		if (exchangeEventItem) {
-			const exchangeEvent = new LiquidityProxyExchangeEvent(ctx, exchangeEventItem?.event)
-			const exchangeEventData = getEntityData(ctx, exchangeEvent, exchangeEventItem)
+		assertDefined(call.extrinsic)
+		const exchangeEvent = findEventByExtrinsicHash(ctx, call.extrinsic.hash, ['LiquidityProxy.Exchange'])
+		if (exchangeEvent) {
+			const exchangeEventData = getEventData(ctx, events.liquidityProxy.exchange, exchangeEvent)
 
 			const [, , , , baseAssetAmount, targetAssetAmount] = exchangeEventData
 

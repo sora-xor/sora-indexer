@@ -57,6 +57,7 @@ const configuration = {
 		addons: {
 			postgres: {
 				profile: details.scaleProfiles.postgres,
+				storage: details.storage,
 			},
 		},
 		processor: {

@@ -3,11 +3,11 @@ import BigNumber from "bignumber.js";
 import { SubstrateBlock } from "@subql/types";
 import { PoolXYK } from "../../types";
 
-import { formatU128ToBalance, assetSnapshotsStorage, tickerSyntheticAssetId } from '../../utils/assets';
+import { assetSnapshotsStorage, tickerSyntheticAssetId } from '../../utils/assets';
 import { networkSnapshotsStorage } from '../../utils/network';
+import { orderBooksStorage } from '../../utils/orderBook';
 import { poolAccounts, PoolsPrices, poolsStorage } from '../../utils/pools';
 import { XOR, PSWAP, DAI, BASE_ASSETS, XSTUSD } from '../../utils/consts';
-import { formatDateTimestamp } from '../../utils';
 import { getPoolsStorageLog, getSyncPricesLog } from "../../utils/logs";
 
 const getAssetDexCap = (assetReserves: BigNumber, assetPrice: BigNumber, daiReserves: BigNumber) => {
@@ -24,12 +24,7 @@ export async function syncPoolXykPrices(block: SubstrateBlock): Promise<void> {
 
     getSyncPricesLog(block).debug('Sync PoolXYK prices')
 
-    const blockTimestamp: number = formatDateTimestamp(block.timestamp);
-    const assetsLockedInPools = new Map<string, bigint>();
-
     let pswapPriceInDAI = new BigNumber(0);
-    let liquiditiesUSD = new BigNumber(0);
-
     let baseAssetWithDoublePoolsPrice = new BigNumber(0);
 
     const pools: Record<string, PoolXYK[]> = {};
@@ -68,16 +63,6 @@ export async function syncPoolXykPrices(block: SubstrateBlock): Promise<void> {
                 daiReserves[baseAssetId] = targetAssetReservesBN
             }
 
-            assetsLockedInPools.set(
-                pool.baseAssetId,
-                (assetsLockedInPools.get(pool.baseAssetId) || BigInt(0)) + pool.baseAssetReserves,
-            );
-
-            assetsLockedInPools.set(
-                pool.targetAssetId,
-                (assetsLockedInPools.get(pool.targetAssetId) || BigInt(0)) + pool.targetAssetReserves,
-            );
-
             pools[baseAssetId].push(pool);
             getPoolsStorageLog(block).debug({ poolId: pool.id }, 'Update pool')
         }
@@ -102,15 +87,6 @@ export async function syncPoolXykPrices(block: SubstrateBlock): Promise<void> {
                 }
             });
         }
-
-        const baseAssetInPoolsFormatted = formatU128ToBalance(baseAssetInPools.toFixed(0), baseAssetId);
-
-        // update liquidities data
-        liquiditiesUSD = liquiditiesUSD.plus(
-            new BigNumber(baseAssetInPoolsFormatted)
-                .multipliedBy(baseAssetPriceInDAI)
-                .multipliedBy(new BigNumber(2))
-        );
 
         // update price samples
         assetsPrices[baseAssetId] = {
@@ -145,15 +121,16 @@ export async function syncPoolXykPrices(block: SubstrateBlock): Promise<void> {
 
         for (const baseAssetId of BASE_ASSETS) {
             if (Array.isArray(pools[baseAssetId])) {
-                pools[baseAssetId].forEach(p => {
+                for (const p of pools[baseAssetId]) {
                     const strategicBonusApy =
                         pswapPriceInDAI.multipliedBy(pswapsPerDay)
                         .dividedBy(baseAssetWithDoublePoolsPrice.dividedBy(Math.pow(10, 18)))
                         .multipliedBy(new BigNumber(365 / 2))
-                        .multipliedBy(new BigNumber(p.multiplier));
-    
-                    p.strategicBonusApy = strategicBonusApy.toFixed(18);
-                });
+                        .multipliedBy(new BigNumber(p.multiplier))
+                        .toFixed(18);
+
+                    await poolsStorage.updateApy(block, p.id, strategicBonusApy);
+                }
             }
         }
     }
@@ -162,19 +139,17 @@ export async function syncPoolXykPrices(block: SubstrateBlock): Promise<void> {
     for (const [assetId, { price }] of Object.entries(assetsPrices)) {
         // do not update price from XYK pool for synthetic assets
         if (!syntheticAssetsIds.includes(assetId)) {
-            await assetSnapshotsStorage.updatePrice(block, assetId, price, blockTimestamp);
+            await assetSnapshotsStorage.updatePrice(block, assetId, price);
         }
     }
     getSyncPricesLog(block).debug(`${Object.entries(assetsPrices).length} asset snapshot prices updated`);
 
-    // update locked luqidity for assets
-    for (const [assetId, liquidity] of assetsLockedInPools.entries()) {
-        await assetSnapshotsStorage.updateLiquidity(block, assetId, liquidity, blockTimestamp);
-    }
-    getSyncPricesLog(block).debug(`${Object.entries(assetsPrices).length} asset snapshot liquidities updated`);
+    const poolsLockedUSD = await poolsStorage.getLockedLiquidityUSD(block);
+    const booksLockedUSD = await orderBooksStorage.getLockedLiquidityUSD(block);
+    const liquiditiesUSD = poolsLockedUSD.plus(booksLockedUSD);
 
     // update total liquidity in USD
-    await networkSnapshotsStorage.updateLiquidityStats(block, liquiditiesUSD, blockTimestamp);
+    await networkSnapshotsStorage.updateLiquidityStats(block, liquiditiesUSD);
 
     getSyncPricesLog(block).debug('PoolXYK prices updated');
 

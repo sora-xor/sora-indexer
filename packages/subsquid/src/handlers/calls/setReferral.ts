@@ -1,22 +1,20 @@
-import { toHex } from '@subsquid/substrate-processor'
-import { BlockContext, CallItem } from '../../types'
-import { ReferralsSetReferrerCall } from '../../types/generated/calls'
-import { addDataToHistoryElement, createHistoryElement, updateHistoryElementStats } from '../../utils/history'
-import { getEntityData } from '../../utils/entities'
+import { BlockContext, Call } from '../../types'
+import { addDataToHistoryElement, createCallHistoryElement, updateHistoryElementStats } from '../../utils/history'
+import { getCallData } from '../../utils/entities'
 import { getCallHandlerLog, logStartProcessingCall } from '../../utils/logs'
+import { calls } from '../../types/generated/merged'
 
-export async function setReferralCallHandler(ctx: BlockContext, callItem: CallItem<'Referrals.set_referrer'>): Promise<void> {
-	logStartProcessingCall(ctx, callItem)
+export async function setReferralCallHandler(ctx: BlockContext, call: Call<'Referrals.set_referrer'>): Promise<void> {
+	logStartProcessingCall(ctx, call)
 
-	const historyElement = await createHistoryElement(ctx, callItem)
+	const historyElement = await createCallHistoryElement(ctx, call)
 
 	// TODO: add type for details
 	let details = new Object()
 
-	const call = new ReferralsSetReferrerCall(ctx, callItem.call)
-	const data = getEntityData(ctx, call, callItem)
+	const data = getCallData(ctx, calls.referrals.setReferrer, call)
 
-	const referrer = toHex(data.referrer)
+	const referrer = data.referrer
 
 	details = {
 		from: historyElement.address,
@@ -26,5 +24,5 @@ export async function setReferralCallHandler(ctx: BlockContext, callItem: CallIt
 	await addDataToHistoryElement(ctx, historyElement, details)
 	await updateHistoryElementStats(ctx, historyElement)
 
-	getCallHandlerLog(ctx, callItem).debug('Saved set referral')
+	getCallHandlerLog(ctx, call).debug('Saved set referral')
 }

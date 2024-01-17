@@ -8,31 +8,33 @@ export async function stakingStakersElectedEventHandler(event: SubstrateEvent): 
 
 	const activeStakingEra = await getActiveStakingEra(event.block)
 
-	const exposures = await api.query.staking.erasStakers.entries();
+	const exposures = await api.query.staking.erasStakers.entries(activeStakingEra.id);
 
 	for (const [[era, validator], exposure] of exposures) {
-		const exposureData =  exposure[1].toJSON() as any;
+		const exposureData =  exposure.toJSON() as any;
 		const total = BigInt(exposureData.total)
 		const own = BigInt(exposureData.own)
 		const others = exposureData.others
 
 		let stakingValidator = await StakingValidator.get(validator.toString())
 		if (!stakingValidator) {
-			stakingValidator = new StakingValidator(validator.toString())
+			stakingValidator = new StakingValidator(validator.toString(), total)
 		}
 
 		const stakingStaker = await getStakingStaker(event.block, validator.toString())
+		const stakingEraValidatorId = `${activeStakingEra.id}-${stakingStaker.id}`;
 
-		let stakingEraValidators = await store.getByField('StakingEraValidator', 'stakerId', stakingStaker.id) as any as StakingEraValidator[];
-		let stakingEraValidator = stakingEraValidators.find(eraValidator => eraValidator.eraId === activeStakingEra.id) as any as StakingEraValidator | null;
+		let stakingEraValidator = await StakingEraValidator.get(stakingEraValidatorId);
 		if (!stakingEraValidator) {
-			stakingEraValidator = new StakingEraValidator(`${activeStakingEra.id}-${stakingStaker.id}`)
-			stakingEraValidator.eraId = activeStakingEra.id
-			stakingEraValidator.validatorId = stakingValidator.id
-			stakingEraValidator.ownBond = BigInt(0)
-			stakingEraValidator.totalBond = BigInt(0)
-			stakingEraValidator.rewardAmount = BigInt(0)
-			stakingEraValidator.stakerId = stakingStaker.id
+			stakingEraValidator = new StakingEraValidator(
+				stakingEraValidatorId,
+				activeStakingEra.id,
+				stakingValidator.id,
+				BigInt(0),
+				BigInt(0),
+				BigInt(0),
+				stakingStaker.id
+			)
 		}
 		stakingEraValidator.ownBond = own
 		stakingEraValidator.totalBond = total
@@ -51,27 +53,31 @@ export async function stakingStakersElectedEventHandler(event: SubstrateEvent): 
 
 		for (let nomination of others) {
 			const stakingStaker = await getStakingStaker(event.block, nomination.who.toString())
+			const stakingEraNominatorId = `${activeStakingEra.id}-${stakingStaker.id}`;
 
-			let stakingEraNominators = await store.getByField('StakingEraNominator', 'stakerId', stakingStaker.id) as any as StakingEraNominator[];
-			let stakingEraNominator = stakingEraNominators.find(eraNominator => eraNominator.eraId === activeStakingEra.id) as any as StakingEraNominator | null;
+			let stakingEraNominator = await StakingEraNominator.get(stakingEraNominatorId);
 			if (!stakingEraNominator) {
-				stakingEraNominator = new StakingEraNominator(`${activeStakingEra.id}-${stakingStaker.id}`)
-				stakingEraNominator.eraId = activeStakingEra.id
-				stakingEraNominator.stakerId = stakingStaker.id
-				stakingEraNominator.bond = BigInt(0)
+				stakingEraNominator = new StakingEraNominator(
+					stakingEraNominatorId,
+					activeStakingEra.id,
+					BigInt(0),
+					stakingStaker.id
+				)
 			}
-			stakingEraNominator.bond += nomination.value
+			stakingEraNominator.bond += BigInt(nomination.value.toString())
 			await stakingEraNominator.save()
 			getEventHandlerLog(event).debug(
 				{ id: stakingEraNominator.id, bond: stakingEraNominator.bond },
 				'Staking Era Nominator saved',
 			)
 
-			let stakingEraNomination = new StakingEraNomination(`${activeStakingEra.id}-${stakingStaker.id}-${stakingValidator.id}`)
-			stakingEraNomination.eraId = activeStakingEra.id
-			stakingEraNomination.amount = nomination.value
-			stakingEraNomination.validatorId = stakingEraValidator.id
-			stakingEraNomination.nominatorId = stakingEraNominator.id
+			let stakingEraNomination = new StakingEraNomination(
+				`${activeStakingEra.id}-${stakingStaker.id}-${stakingValidator.id}`,
+				activeStakingEra.id,
+				BigInt(nomination.value.toString()),
+				stakingEraValidator.id,
+				stakingEraNominator.id
+			);
 			await stakingEraNomination.save()
 			getEventHandlerLog(event).debug(
 				{ id: stakingEraNomination.id, amount: stakingEraNomination.amount },

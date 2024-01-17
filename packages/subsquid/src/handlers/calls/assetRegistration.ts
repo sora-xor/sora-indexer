@@ -1,18 +1,17 @@
-import { addDataToHistoryElement, createHistoryElement, updateHistoryElementStats } from '../../utils/history'
-import { BlockContext, CallItem } from '../../types'
+import { addDataToHistoryElement, createCallHistoryElement, updateHistoryElementStats } from '../../utils/history'
+import { BlockContext, Call } from '../../types'
 import { findEventByExtrinsicHash } from '../../utils/events'
-import { AssetsAssetRegisteredEvent } from '../../types/generated/events'
-import { AssetsRegisterCall } from '../../types/generated/calls'
 import { AssetId } from '../../types'
-import { getEntityData } from '../../utils/entities'
+import { getCallData, getEventData } from '../../utils/entities'
 import { getAssetId } from '../../utils/assets'
 import { logStartProcessingCall } from '../../utils/logs'
+import { calls, events } from '../../types/generated/merged'
 
-export async function assetRegistrationCallHandler(ctx: BlockContext, callItem: CallItem<'Assets.register'>): Promise<void> {
-	logStartProcessingCall(ctx, callItem)
+export async function assetRegistrationCallHandler(ctx: BlockContext, call: Call<'Assets.register'>): Promise<void> {
+	logStartProcessingCall(ctx, call)
 
-	const extrinsicHash = callItem.extrinsic.hash
-	const historyElement = await createHistoryElement(ctx, callItem)
+	const extrinsicHash = call.extrinsic!.hash
+	const historyElement = await createCallHistoryElement(ctx, call)
 
 	if (!historyElement) return
 
@@ -21,9 +20,8 @@ export async function assetRegistrationCallHandler(ctx: BlockContext, callItem: 
 	}
 
 	if (historyElement.execution.success) {
-		const assetRegistrationEventItem = findEventByExtrinsicHash(ctx, extrinsicHash, ['Assets.AssetRegistered'], true)
-		const assetRegistrationEvent = new AssetsAssetRegisteredEvent(ctx, assetRegistrationEventItem.event)
-		const assetRegistrationEventData = getEntityData(ctx, assetRegistrationEvent, assetRegistrationEventItem)
+		const assetRegistrationEvent = findEventByExtrinsicHash(ctx, extrinsicHash, ['Assets.AssetRegistered'], true)
+		const assetRegistrationEventData = getEventData(ctx, events.assets.assetRegistered, assetRegistrationEvent)
 
 		const assetId = getAssetId(assetRegistrationEventData[0])
 
@@ -31,8 +29,7 @@ export async function assetRegistrationCallHandler(ctx: BlockContext, callItem: 
 			assetId,
 		}
 	} else {
-		const call = new AssetsRegisterCall(ctx, callItem.call)
-		const data = getEntityData(ctx, call, callItem)
+		const data = getCallData(ctx, calls.assets.register, call)
 
 		const symbol = getAssetId(data.symbol)
 

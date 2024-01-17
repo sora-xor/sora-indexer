@@ -1,19 +1,17 @@
-import { addDataToHistoryElement, createHistoryElement, updateHistoryElementStats } from '../../utils/history'
+import { addDataToHistoryElement, createCallHistoryElement, updateHistoryElementStats } from '../../utils/history'
 import { formatU128ToBalance, getAssetId } from '../../utils/assets'
 import { XOR } from '../../utils/consts'
-import { AssetAmount, BlockContext, CallItem } from '../../types'
+import { AssetAmount, BlockContext, Call } from '../../types'
 import { findEventByExtrinsicHash } from '../../utils/events'
-import { DemeterFarmingPlatformDepositedEvent } from '../../types/generated/events'
-import { DemeterFarmingPlatformDepositCall } from '../../types/generated/calls'
-import { getEntityData } from '../../utils/entities'
+import { getCallData, getEventData } from '../../utils/entities'
 import { logStartProcessingCall } from '../../utils/logs'
+import { calls, events } from '../../types/generated/merged'
+import { assertDefined } from '../../utils'
 
-export async function demeterDepositCallHandler(ctx: BlockContext, callItem: CallItem<'DemeterFarmingPlatform.deposit'>): Promise<void> {
-	logStartProcessingCall(ctx, callItem)
+export async function demeterDepositCallHandler(ctx: BlockContext, call: Call<'DemeterFarmingPlatform.deposit'>): Promise<void> {
+	logStartProcessingCall(ctx, call)
 
-	const call = new DemeterFarmingPlatformDepositCall(ctx, callItem.call)
-
-	const data = getEntityData(ctx, call, callItem)
+	const data = getCallData(ctx, calls.demeterFarmingPlatform.deposit, call)
 
 	const baseAssetId = 'baseAsset' in data ? getAssetId(data.baseAsset) : XOR
 	const assetId = getAssetId(data.poolAsset)
@@ -23,12 +21,11 @@ export async function demeterDepositCallHandler(ctx: BlockContext, callItem: Cal
 
 	let amount: string
 
-	const eventItem = findEventByExtrinsicHash(ctx, callItem.extrinsic.hash, ['DemeterFarmingPlatform.Deposited'])
+	assertDefined(call.extrinsic)
+	const event = findEventByExtrinsicHash(ctx, call.extrinsic.hash, ['DemeterFarmingPlatform.Deposited'])
 
-	if (eventItem) {
-		const event = new DemeterFarmingPlatformDepositedEvent(ctx, eventItem.event)
-
-		const data = getEntityData(ctx, event, eventItem)
+	if (event) {
+		const data = getEventData(ctx, events.demeterFarmingPlatform.deposited, event)
 
 		const assetAmount = typeof data[4] === 'bigint' ? data[4] : (data[5] as AssetAmount)
 
@@ -46,7 +43,7 @@ export async function demeterDepositCallHandler(ctx: BlockContext, callItem: Cal
 		amount,
 	}
 
-	const historyElement = await createHistoryElement(ctx, callItem)
+	const historyElement = await createCallHistoryElement(ctx, call)
 	await addDataToHistoryElement(ctx, historyElement, details)
 	await updateHistoryElementStats(ctx, historyElement)
 }

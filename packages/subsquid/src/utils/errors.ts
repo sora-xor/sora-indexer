@@ -1,31 +1,16 @@
-import { AnyEntityItem, BlockContext } from '../types'
+import { BlockContext, EntityKind } from '../types'
 
 export class UnsupportedSpecError extends Error {
-	constructor(ctx: BlockContext, { kind, name }: { kind: 'call' | 'event' | 'storage'; name: string }) {
+	constructor(ctx: BlockContext, { kind, name }: { kind: EntityKind; name: string }) {
 		const blockHeight = ctx.block.header.height
-		let specHash: string | undefined
-		switch (kind) {
-			case 'call':
-				specHash = ctx._chain.getCallHash(name)
-				break
-			case 'event':
-				specHash = ctx._chain.getEventHash(name)
-				break
-			case 'storage':
-				// TODO: check if this is correct
-				specHash = ctx._chain.getStorageItemTypeHash('', '')
-				break
-		}
 
-		if (!specHash) super(`[${blockHeight}] There is no hash for ${name} ${kind}`)
-
-		super(`[${blockHeight}] Unsupported spec ${specHash} for ${name} ${kind}`)
+		super(`[${blockHeight}] Unsupported spec for ${name} ${kind}`)
 	}
 }
 
 const getCannotFindEntityErrorMessage = (
 	ctx: BlockContext,
-	kind: AnyEntityItem['kind'],
+	kind: EntityKind,
 	extrinsicHash: string,
 	entityNames?: string | string[],
 ): string => {

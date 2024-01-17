@@ -34,9 +34,6 @@ export class AssetSnapshot {
     @Column_("jsonb", {transformer: {to: obj => obj == null ? undefined : obj.toJSON(), from: obj => obj == null ? undefined : new AssetVolume(undefined, obj)}, nullable: true})
     volume!: AssetVolume | undefined | null
 
-    @Column_("numeric", {transformer: marshal.bigintTransformer, nullable: true})
-    liquidity!: bigint | undefined | null
-
     @Column_("numeric", {transformer: marshal.bigintTransformer, nullable: false})
     supply!: bigint
 

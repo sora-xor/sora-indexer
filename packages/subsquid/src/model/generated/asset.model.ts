@@ -24,11 +24,11 @@ export class Asset {
     @Column_("numeric", {transformer: marshal.bigintTransformer, nullable: false})
     supply!: bigint
 
-    @Column_("numeric", {transformer: marshal.bigintTransformer, nullable: false})
-    liquidity!: bigint
+    @Column_("numeric", {transformer: marshal.bigintTransformer, nullable: true})
+    liquidity!: bigint | undefined | null
 
-    @Column_("numeric", {transformer: marshal.floatTransformer, nullable: true})
-    liquidityUSD!: number | undefined | null
+    @Column_("numeric", {transformer: marshal.bigintTransformer, nullable: true})
+    liquidityBooks!: bigint | undefined | null
 
     @Column_("numeric", {transformer: marshal.floatTransformer, nullable: true})
     priceChangeDay!: number | undefined | null

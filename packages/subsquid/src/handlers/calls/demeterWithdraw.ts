@@ -1,21 +1,20 @@
-import { addDataToHistoryElement, createHistoryElement, updateHistoryElementStats } from '../../utils/history'
+import { addDataToHistoryElement, createCallHistoryElement, updateHistoryElementStats } from '../../utils/history'
 import { formatU128ToBalance, getAssetId } from '../../utils/assets'
-import { BlockContext, AssetAmount, CallItem } from '../../types'
+import { BlockContext, AssetAmount, Call } from '../../types'
 import { findEventByExtrinsicHash } from '../../utils/events'
-import { DemeterFarmingPlatformWithdrawnEvent } from '../../types/generated/events'
-import { DemeterFarmingPlatformWithdrawCall } from '../../types/generated/calls'
 import { XOR } from '../../utils/consts'
-import { getEntityData } from '../../utils/entities'
+import { getCallData, getEventData } from '../../utils/entities'
 import { logStartProcessingCall } from '../../utils/logs'
+import { calls, events } from '../../types/generated/merged'
+import { assertDefined } from '../../utils'
 
-export async function demeterWithdrawCallHandler(ctx: BlockContext, callItem: CallItem<'DemeterFarmingPlatform.withdraw'>): Promise<void> {
-	logStartProcessingCall(ctx, callItem)
+export async function demeterWithdrawCallHandler(ctx: BlockContext, call: Call<'DemeterFarmingPlatform.withdraw'>): Promise<void> {
+	logStartProcessingCall(ctx, call)
 
-	const extrinsicHash = callItem.extrinsic.hash
+	assertDefined(call.extrinsic)
+	const extrinsicHash = call.extrinsic.hash
 
-	const call = new DemeterFarmingPlatformWithdrawCall(ctx, callItem.call)
-
-	const data = getEntityData(ctx, call, callItem)
+	const data = getCallData(ctx, calls.demeterFarmingPlatform.withdraw, call)
 
 	const baseAssetId = 'baseAsset' in data ? getAssetId(data.baseAsset) : XOR
 	const assetId = getAssetId(data.poolAsset)
@@ -25,11 +24,10 @@ export async function demeterWithdrawCallHandler(ctx: BlockContext, callItem: Ca
 
 	let amount: string
 
-	const eventItem = findEventByExtrinsicHash(ctx, extrinsicHash, ['DemeterFarmingPlatform.Withdrawn'])
+	const event = findEventByExtrinsicHash(ctx, extrinsicHash, ['DemeterFarmingPlatform.Withdrawn'])
 
-	if (eventItem) {
-		const event = new DemeterFarmingPlatformWithdrawnEvent(ctx, eventItem.event)
-		const data = getEntityData(ctx, event, eventItem)
+	if (event) {
+		const data = getEventData(ctx, events.demeterFarmingPlatform.withdrawn, event)
 
 		const assetAmount = data[1] as AssetAmount
 
@@ -47,7 +45,7 @@ export async function demeterWithdrawCallHandler(ctx: BlockContext, callItem: Ca
 		amount,
 	}
 
-	const historyElement = await createHistoryElement(ctx, callItem)
+	const historyElement = await createCallHistoryElement(ctx, call)
 	if (!historyElement) return
 	await addDataToHistoryElement(ctx, historyElement, details)
 	await updateHistoryElementStats(ctx, historyElement)

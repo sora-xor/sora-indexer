@@ -2,13 +2,15 @@ import BigNumber from 'bignumber.js'
 
 import { PoolXYK } from '../../model'
 
-import { formatU128ToBalance, assetSnapshotsStorage, tickerSyntheticAssetId } from '../../utils/assets'
+import { assetSnapshotsStorage, tickerSyntheticAssetId } from '../../utils/assets'
 import { networkSnapshotsStorage } from '../../utils/network'
+import { orderBooksStorage } from '../../utils/orderBook'
 import { poolAccounts, PoolsPrices, poolsStorage } from '../../utils/pools'
 import { XOR, PSWAP, DAI, BASE_ASSETS, XSTUSD } from '../../utils/consts'
 import { BlockContext } from '../../types'
 import { AssetId } from '../../types'
 import { getPoolsStorageLog, getSyncPricesLog } from '../../utils/logs'
+import { toAddress } from '../../utils'
 
 const getAssetDexCap = (assetReserves: BigNumber, assetPrice: BigNumber, daiReserves: BigNumber) => {
 	// theoretical asset capitalization in DAI inside DEX
@@ -24,10 +26,7 @@ export async function syncPoolXykPrices(ctx: BlockContext): Promise<void> {
 
 	getSyncPricesLog(ctx).debug('Sync PoolXYK prices')
 
-	const assetsLockedInPools = new Map<AssetId, bigint>()
-
 	let pswapPriceInDAI = new BigNumber(0)
-	let liquiditiesUSD = new BigNumber(0)
 
 	let baseAssetWithDoublePoolsPrice = new BigNumber(0)
 
@@ -67,18 +66,8 @@ export async function syncPoolXykPrices(ctx: BlockContext): Promise<void> {
 				daiReserves[baseAssetId] = targetAssetReservesBN
 			}
 
-			assetsLockedInPools.set(
-				pool.baseAsset.id as AssetId,
-				(assetsLockedInPools.get(pool.baseAsset.id as AssetId) || 0n) + pool.baseAssetReserves,
-			)
-
-			assetsLockedInPools.set(
-				pool.targetAsset.id as AssetId,
-				(assetsLockedInPools.get(pool.targetAsset.id as AssetId) || 0n) + pool.targetAssetReserves,
-			)
-
 			pools[baseAssetId].push(pool)
-			getPoolsStorageLog(ctx).debug({ poolId: pool.id }, 'Update pool')
+			getPoolsStorageLog(ctx, true).debug({ poolId: pool.id }, 'Update pool')
 		}
 
 		baseAssetWithDoublePoolsPrice = baseAssetWithDoublePoolsPrice.plus(baseAssetWithDoublePools.multipliedBy(baseAssetPriceInDAI))
@@ -101,13 +90,6 @@ export async function syncPoolXykPrices(ctx: BlockContext): Promise<void> {
 				}
 			})
 		}
-
-		const baseAssetInPoolsFormatted = formatU128ToBalance(BigInt(baseAssetInPools.toFixed(0)), baseAssetId)
-
-		// update liquidities data
-		liquiditiesUSD = liquiditiesUSD.plus(
-			new BigNumber(baseAssetInPoolsFormatted).multipliedBy(baseAssetPriceInDAI).multipliedBy(new BigNumber(2)),
-		)
 
 		// update price samples
 		assetsPrices[baseAssetId] = {
@@ -143,15 +125,16 @@ export async function syncPoolXykPrices(ctx: BlockContext): Promise<void> {
 
 		for (const baseAssetId of BASE_ASSETS) {
 			if (Array.isArray(pools[baseAssetId])) {
-				pools[baseAssetId].forEach((p) => {
-					const strategicBonusApy = pswapPriceInDAI
+				for (const pool of pools[baseAssetId]) {
+                    const strategicBonusApy = pswapPriceInDAI
 						.multipliedBy(pswapsPerDay)
-						.dividedBy(baseAssetWithDoublePoolsPrice.dividedBy(Math.pow(10, 18)))
-						.multipliedBy(new BigNumber(365 / 2))
-						.multipliedBy(new BigNumber(p.multiplier))
+                        .dividedBy(baseAssetWithDoublePoolsPrice.dividedBy(Math.pow(10, 18)))
+                        .multipliedBy(new BigNumber(365 / 2))
+                        .multipliedBy(new BigNumber(pool.multiplier))
+                        .toFixed(18)
 
-					p.strategicBonusApy = strategicBonusApy.toFixed(18)
-				})
+                    await poolsStorage.updateApy(ctx, toAddress(pool.id), strategicBonusApy)
+                }
 			}
 		}
 	}
@@ -163,13 +146,11 @@ export async function syncPoolXykPrices(ctx: BlockContext): Promise<void> {
 			await assetSnapshotsStorage.updatePrice(ctx, assetId as AssetId, price)
 		}
 	}
-    getSyncPricesLog(ctx).debug(`${Object.entries(assetsPrices).length} asset snapshot prices updated`);
+	getSyncPricesLog(ctx).debug(`${Object.entries(assetsPrices).length} asset snapshot prices updated`)
 
-	// update locked liquidity for assets
-	for (const [assetId, liquidity] of assetsLockedInPools.entries()) {
-		await assetSnapshotsStorage.updateLiquidity(ctx, assetId as AssetId, liquidity)
-	}
-    getSyncPricesLog(ctx).debug(`${Object.entries(assetsPrices).length} asset snapshot liquidities updated`);
+	const poolsLockedUSD = await poolsStorage.getLockedLiquidityUSD(ctx)
+    const booksLockedUSD = await orderBooksStorage.getLockedLiquidityUSD(ctx)
+    const liquiditiesUSD = poolsLockedUSD.plus(booksLockedUSD)
 
 	// update total liquidity in USD
 	await networkSnapshotsStorage.updateLiquidityStats(ctx, liquiditiesUSD)

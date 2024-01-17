@@ -3,7 +3,7 @@
         {
             "minmax": [
                 1,
-                32
+                null
             ],
             "types": {
                 "String": "Text",
@@ -684,7 +684,7 @@
         {
             "minmax": [
                 33,
-                34
+                null
             ],
             "types": {
                 "ContributorsVesting": {
@@ -926,7 +926,7 @@
         {
             "minmax": [
                 35,
-                36
+                null
             ],
             "types": {
                 "LiquiditySourceIdOf": {
@@ -938,7 +938,7 @@
         {
             "minmax": [
                 37,
-                41
+                null
             ],
             "types": {
                 "ContributorsVesting": {
@@ -998,7 +998,7 @@
         {
             "minmax": [
                 42,
-                44
+                null
             ],
             "types": {
                 "AssetInfo": {
@@ -1454,7 +1454,7 @@
         {
             "minmax": [
                 45,
-                46
+                null
             ],
             "types": {
                 "PredefinedAssetId": {
@@ -1477,7 +1477,7 @@
         {
             "minmax": [
                 47,
-                51
+                null
             ],
             "types": {
                 "HermesPollInfo": {
@@ -1556,7 +1556,7 @@
         {
             "minmax": [
                 52,
-                53
+                null
             ],
             "types": {
                 "AppKind": {

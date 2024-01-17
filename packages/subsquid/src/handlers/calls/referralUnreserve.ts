@@ -1,17 +1,17 @@
-import { addDataToHistoryElement, createHistoryElement, updateHistoryElementStats } from '../../utils/history'
+import { addDataToHistoryElement, createCallHistoryElement, updateHistoryElementStats } from '../../utils/history'
 import { formatU128ToBalance } from '../../utils/assets'
 import { XOR } from '../../utils/consts'
-import { BlockContext, AssetAmount, CallItem } from '../../types'
+import { BlockContext, AssetAmount, Call } from '../../types'
 import { findEventByExtrinsicHash, getAssetsTransferEventData } from '../../utils/events'
-import { ReferralsUnreserveCall } from '../../types/generated/calls'
-import { getEntityData } from '../../utils/entities'
+import { getCallData } from '../../utils/entities'
 import { getCallHandlerLog, logStartProcessingCall } from '../../utils/logs'
+import { calls } from '../../types/generated/merged'
+import { assertDefined } from '../../utils'
 
-export async function referralUnreserveCallHandler(ctx: BlockContext, callItem: CallItem<'Referrals.unreserve'>): Promise<void> {
-	logStartProcessingCall(ctx, callItem)
+export async function referralUnreserveCallHandler(ctx: BlockContext, call: Call<'Referrals.unreserve'>): Promise<void> {
+	logStartProcessingCall(ctx, call)
 
-	const extrinsicHash = callItem.extrinsic.hash
-	const historyElement = await createHistoryElement(ctx, callItem)
+	const historyElement = await createCallHistoryElement(ctx, call)
 
 	if (!historyElement) return
 
@@ -22,9 +22,10 @@ export async function referralUnreserveCallHandler(ctx: BlockContext, callItem: 
 	} | null = null
 
 	if (historyElement.execution.success) {
-		const balancesTransferEventItem = findEventByExtrinsicHash(ctx, extrinsicHash, ['Balances.Transfer'], true)
+		assertDefined(call.extrinsic)
+		const balancesTransferEvent = findEventByExtrinsicHash(ctx, call.extrinsic.hash, ['Balances.Transfer'], true)
 
-		const { from, to, amount } = getAssetsTransferEventData(ctx, balancesTransferEventItem)
+		const { from, to, amount } = getAssetsTransferEventData(ctx, balancesTransferEvent)
 
 		details = {
 			from,
@@ -32,8 +33,7 @@ export async function referralUnreserveCallHandler(ctx: BlockContext, callItem: 
 			amount: formatU128ToBalance(amount, XOR),
 		}
 	} else {
-		const call = new ReferralsUnreserveCall(ctx, callItem.call)
-		const data = getEntityData(ctx, call, callItem)
+		const data = getCallData(ctx, calls.referrals.unreserve, call)
 
 		details = {
 			amount: formatU128ToBalance(data.balance as AssetAmount, XOR),
@@ -43,5 +43,5 @@ export async function referralUnreserveCallHandler(ctx: BlockContext, callItem: 
 	if (details) await addDataToHistoryElement(ctx, historyElement, details)
 	await updateHistoryElementStats(ctx, historyElement)
 
-	getCallHandlerLog(ctx, callItem).debug('Saved referral unreserve')
+	getCallHandlerLog(ctx, call).debug('Saved referral unreserve')
 }

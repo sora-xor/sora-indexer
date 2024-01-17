@@ -1,23 +1,32 @@
 import { ExecutionResult, ExecutionError, HistoryElement, HistoryElementCall, HistoryElementType } from '../model'
-import { AnyCallItem, AssetAmount, BlockContext, EntityItem, EntityItemName } from '../types'
+import { AssetAmount, BlockContext, Call, Event } from '../types'
 import { getAccountEntity } from './account'
 import { networkSnapshotsStorage } from './network'
-import { formatDateTimestamp, getEntityId, toAddress, toCamelCase } from './index'
+import { assertDefined, formatDateTimestamp, getBlockTimestamp, getCallId, getEventId, toAddress, toCamelCase } from './index'
 import { nToU8a } from '@polkadot/util'
 import { toJSON } from '@subsquid/util-internal-json'
 import { findEventByExtrinsicHash } from './events'
-import { XorFeeFeeWithdrawnEvent } from '../types/generated/events'
-import { getEntityData } from './entities'
+import { getEventData } from './entities'
 import { getUtilsLog } from './logs'
+import { events } from '../types/generated/merged'
 
 const INCOMING_TRANSFER_METHODS = ['transfer', 'swap_transfer']
 
-const getCallItemNetworkFee = (ctx: BlockContext, callItem: AnyCallItem): AssetAmount => {
-	const eventItem = findEventByExtrinsicHash(ctx, callItem.extrinsic.hash, ['XorFee.FeeWithdrawn'])
+type EntityItem = {
+	kind: 'call',
+	entity: Call<any>,
+} | {
+	kind: 'event',
+	entity: Event<any>,
+}
 
-	if (eventItem) {
-		const event = new XorFeeFeeWithdrawnEvent(ctx, eventItem.event)
-		const eventData = getEntityData(ctx, event, eventItem)
+
+const getCallNetworkFee = (ctx: BlockContext, call: Call<any>): AssetAmount => {
+	assertDefined(call.extrinsic)
+	const event = findEventByExtrinsicHash(ctx, call.extrinsic.hash, ['XorFee.FeeWithdrawn'])
+
+	if (event) {
+		const eventData = getEventData(ctx, events.xorFee.feeWithdrawn, event)
 
 		return eventData[1] as AssetAmount
 	}
@@ -28,7 +37,6 @@ function filterDataProperties(obj: Record<string, any>) {
 	const entries = []
 	for (let key in obj) {
 		if (obj.hasOwnProperty(key)) {
-			console.log('key: ', key)
 			const type = typeof obj[key]
 			if (type === 'number' || type === 'string' || type === 'bigint' || type === 'boolean') {
 				entries.push(key + ': ' + obj[key])
@@ -40,28 +48,33 @@ function filterDataProperties(obj: Record<string, any>) {
 
 export const createHistoryElement = async (
 	ctx: BlockContext,
-	entityItem: EntityItem<EntityItemName>,
+	{ kind, entity }: EntityItem,
 	data?: {},
+	address?: string,
 ): Promise<HistoryElement> => {
 	const historyElement = new HistoryElement()
 
-	if (!ctx.block.header.validator) {
-		throw Error('There is no block validator')
-	}
+	const extrinsic = entity.extrinsic
 
-	const extrinsic = entityItem.kind === 'call' ? entityItem.extrinsic : entityItem.event.extrinsic
-
-	historyElement.id = getEntityId(ctx, entityItem)
-	historyElement.type = entityItem.kind === 'call' ? HistoryElementType.CALL : HistoryElementType.EVENT
+	historyElement.id = kind === 'call' ? getCallId(ctx, entity) : getEventId(ctx, entity)
+	historyElement.type = kind === 'call' ? HistoryElementType.CALL : HistoryElementType.EVENT
 	historyElement.blockHeight = ctx.block.header.height
 	historyElement.blockHash = ctx.block.header.hash.toString()
-	historyElement.module = toCamelCase(entityItem.name.split('.')[0])
-	historyElement.method = toCamelCase(entityItem.name.split('.')[1])
-	historyElement.address = toAddress(extrinsic?.signature?.address)
-	historyElement.networkFee = entityItem.kind === 'call' ? getCallItemNetworkFee(ctx, entityItem).toString() : null
-	historyElement.timestamp = formatDateTimestamp(new Date(ctx.block.header.timestamp))
+	historyElement.module = toCamelCase(entity.name.split('.')[0])
+	historyElement.method = toCamelCase(entity.name.split('.')[1])
+	historyElement.name = historyElement.module + '.' + historyElement.method
 	historyElement.updatedAtBlock = ctx.block.header.height
 	historyElement.callNames = []
+	historyElement.networkFee = kind === 'call' ? getCallNetworkFee(ctx, entity).toString() : null
+	historyElement.timestamp = getBlockTimestamp(ctx)
+	if (address) {
+		historyElement.address = address
+	} else if (kind === 'call') {
+		assertDefined(extrinsic?.signature)
+		historyElement.address = toAddress(extrinsic.signature.address as string)
+	} else {
+		historyElement.address = getEventId(ctx, entity)
+	}
 
 	const success = extrinsic?.success
 
@@ -70,16 +83,17 @@ export const createHistoryElement = async (
 			success,
 		})
 	} else if (extrinsic) {
+		// TODO: change 'any' type to something better
+		const extrinsicError = extrinsic.error as any
 		const error =
-			extrinsic.error.__kind === 'Module'
+			extrinsicError.__kind === 'Module'
 				? new ExecutionError({
-						moduleErrorId: nToU8a(extrinsic.error.value.error).at(-1),
-						moduleErrorIndex: extrinsic.error.value.index,
+						moduleErrorId: nToU8a(extrinsicError.value.error).at(-1),
+						moduleErrorIndex: extrinsicError.value.index,
 				  })
 				: new ExecutionError({
-						nonModuleErrorMessage: JSON.stringify(extrinsic.error),
+						nonModuleErrorMessage: JSON.stringify(extrinsicError),
 				  })
-
 		historyElement.execution = new ExecutionResult({
 			success,
 			error,
@@ -98,6 +112,23 @@ export const createHistoryElement = async (
 	return historyElement
 }
 
+export const createCallHistoryElement = async (
+	ctx: BlockContext,
+	call: Call<any>,
+	data?: {},
+) => {
+	return createHistoryElement(ctx, { kind: 'call', entity: call }, data)
+}
+
+export const createEventHistoryElement = async (
+	ctx: BlockContext,
+	event: Event<any>,
+	address: string,
+	data?: {}
+) => {
+	return createHistoryElement(ctx, { kind: 'event', entity: event }, data, address)
+}
+
 export const addDataToHistoryElement = async (ctx: BlockContext, historyElement: HistoryElement, data: {}) => {
 	historyElement.data = toJSON(data)
 	if ('to' in data && typeof data.to === 'string') {
@@ -110,7 +141,7 @@ export const addDataToHistoryElement = async (ctx: BlockContext, historyElement:
 
 	await ctx.store.save(historyElement)
 	getUtilsLog(ctx).debug({ historyElementId: historyElement.id }, 'Updated history element with data')
-    // TODO: fix data in log
+	// TODO: fix data in log
 	// getUtilsLog(ctx).debug({ historyElementId: historyElement.id, data: filterDataProperties(data) }, 'Updated history element with data')
 }
 
@@ -129,7 +160,7 @@ export const updateHistoryElementStats = async (ctx: BlockContext, historyElemen
 		addresses.push(((historyElement.data as any)['to'] as string).toString())
 	}
 
-	getUtilsLog(ctx).debug({ addresses: addresses.join(', ') }, 'addresses');
+	getUtilsLog(ctx).debug({ addresses: addresses.join(', ') }, 'addresses')
 	// update accounts data
 	for (const address of addresses) {
 		const account = await getAccountEntity(ctx, address)

@@ -1,15 +1,13 @@
-import { BlockContext, CallItem, CallItemName, EntityItem, EntityItemName, EventItem, EventItemName } from '../types'
-import { SubstrateExtrinsic } from '@subsquid/substrate-processor'
-import { BalancesTransferEvent, TokensTransferEvent, BalancesDepositEvent, TokensDepositedEvent } from '../types/generated/events'
+import { BlockContext, Event, EventName } from '../types'
 import { XOR } from './consts'
 import { Address, AssetAmount, AssetId } from '../types'
 import { toAddress } from '.'
-import { getEntityData } from './entities'
 import { getAssetId } from './assets'
 import { CannotFindEventError } from './errors'
-import { getUtilsLog } from './logs'
+import { events } from '../types/generated/merged'
+import { getEventData } from './entities'
 
-type SpecificEventItem<T extends EventItemName> = EventItem<T>
+type SpecificEvent<T extends EventName> = Event<T>
 
 export type TransferEventData = {
 	assetId: AssetId
@@ -24,30 +22,26 @@ export type DepositEventData = {
 	amount: bigint
 }
 
-export function getBlockEvents(ctx: BlockContext): EventItem<EventItemName>[] {
-	return ctx.block.items.filter((c) => c.kind === 'event') as EventItem<EventItemName>[]
-}
-
-export function findEventsByExtrinsicHash<T extends EventItemName[]>(
+export function findEventsByExtrinsicHash<T extends EventName[]>(
 	ctx: BlockContext,
-	extrinsicHash: SubstrateExtrinsic['hash'],
+	extrinsicHash: string,
 	eventNames?: T,
-): { [K in T[number]]: SpecificEventItem<K> }[T[number]][] {
-	const events = getBlockEvents(ctx).filter(
-		(e) => (!eventNames || eventNames.includes(e.name)) && e.event.extrinsic?.hash === extrinsicHash,
+): { [K in T[number]]: SpecificEvent<K> }[T[number]][] {
+	const events = ctx.block.events.filter(
+		(e) => (!eventNames || eventNames.includes(e.name as any)) && e.extrinsic?.hash === extrinsicHash,
 	)
 	// TODO: get rid of this unknown type
 	return events as unknown as {
-		[K in T[number]]: SpecificEventItem<K>
+		[K in T[number]]: SpecificEvent<K>
 	}[T[number]][]
 }
 
-export function findEventByExtrinsicHash<T extends EventItemName[], F extends boolean>(
+export function findEventByExtrinsicHash<T extends EventName[], F extends boolean>(
 	ctx: BlockContext,
-	extrinsicHash: SubstrateExtrinsic['hash'],
+	extrinsicHash: string,
 	eventNames?: T,
 	throwError?: F,
-): F extends true ? { [K in T[number]]: SpecificEventItem<K> }[T[number]] : { [K in T[number]]: SpecificEventItem<K> }[T[number]] | null {
+): F extends true ? { [K in T[number]]: SpecificEvent<K> }[T[number]] : { [K in T[number]]: SpecificEvent<K> }[T[number]] | null {
 	const event = findEventsByExtrinsicHash(ctx, extrinsicHash, eventNames)[0] ?? null
 	// if (event) {
 	// 	getUtilsLog(ctx).debug(`The '${event.name}' event found`)
@@ -62,22 +56,20 @@ export function findEventByExtrinsicHash<T extends EventItemName[], F extends bo
 	return event
 }
 
-export const isXorTransferEvent = (e: EventItem<EventItemName>) => {
+export const isXorTransferEvent = (e: Event<EventName>) => {
 	return e.name === 'Balances.Transfer'
 }
 
-export const isTokenTransferEvent = (e: EventItem<EventItemName>) => {
+export const isTokenTransferEvent = (e: Event<EventName>) => {
 	return e.name === 'Tokens.Transfer'
 }
 
-export const isAssetTransferEvent = (e: EventItem<EventItemName>): boolean => {
+export const isAssetTransferEvent = (e: Event<EventName>): boolean => {
 	return isXorTransferEvent(e) || isTokenTransferEvent(e)
 }
 
-export const getBalancesTransferEventData = (ctx: BlockContext, eventItem: EventItem<'Balances.Transfer'>): TransferEventData => {
-	const event = new BalancesTransferEvent(ctx, eventItem.event)
-
-	const data = getEntityData(ctx, event, eventItem)
+export const getBalancesTransferEventData = (ctx: BlockContext, event: Event<'Balances.Transfer'>): TransferEventData => {
+	const data = getEventData(ctx, events.balances.transfer, event)
 
 	return {
 		assetId: XOR,
@@ -87,10 +79,8 @@ export const getBalancesTransferEventData = (ctx: BlockContext, eventItem: Event
 	}
 }
 
-export const getTokensTransferEventData = (ctx: BlockContext, eventItem: EventItem<'Tokens.Transfer'>): TransferEventData => {
-	const event = new TokensTransferEvent(ctx, eventItem.event)
-
-	const { currencyId, from, to, amount } = getEntityData(ctx, event, eventItem)
+export const getTokensTransferEventData = (ctx: BlockContext, event: Event<'Tokens.Transfer'>): TransferEventData => {
+	const { currencyId, from, to, amount } = getEventData(ctx, events.tokens.transfer, event)
 
 	return {
 		assetId: getAssetId(currencyId),
@@ -102,19 +92,17 @@ export const getTokensTransferEventData = (ctx: BlockContext, eventItem: EventIt
 
 export const getAssetsTransferEventData = (
 	ctx: BlockContext,
-	eventItem: EventItem<'Balances.Transfer'> | EventItem<'Tokens.Transfer'>,
+	event: Event<'Balances.Transfer'> | Event<'Tokens.Transfer'>,
 ): TransferEventData => {
-	if (eventItem.name === 'Balances.Transfer') {
-		return getBalancesTransferEventData(ctx, eventItem)
+	if (event.name === 'Balances.Transfer') {
+		return getBalancesTransferEventData(ctx, event)
 	} else {
-		return getTokensTransferEventData(ctx, eventItem)
+		return getTokensTransferEventData(ctx, event)
 	}
 }
 
-export const getBalancesDepositEventData = (ctx: BlockContext, eventItem: EventItem<'Balances.Deposited'>): DepositEventData => {
-	const event = new BalancesDepositEvent(ctx, eventItem.event)
-
-	const data = getEntityData(ctx, event, eventItem)
+export const getBalancesDepositEventData = (ctx: BlockContext, event: Event<'Balances.Deposited'>): DepositEventData => {
+	const data = getEventData(ctx, events.balances.deposit, event)
 
 	return {
 		assetId: XOR,
@@ -123,10 +111,8 @@ export const getBalancesDepositEventData = (ctx: BlockContext, eventItem: EventI
 	}
 }
 
-export const getTokensDepositedEventData = (ctx: BlockContext, eventItem: EventItem<'Tokens.Deposited'>): DepositEventData => {
-	const event = new TokensDepositedEvent(ctx, eventItem.event)
-
-	const { currencyId, who, amount } = getEntityData(ctx, event, eventItem)
+export const getTokensDepositedEventData = (ctx: BlockContext, event: Event<'Tokens.Deposited'>): DepositEventData => {
+	const { currencyId, who, amount } = getEventData(ctx, events.tokens.deposited, event)
 
 	return {
 		assetId: getAssetId(currencyId),
@@ -137,11 +123,11 @@ export const getTokensDepositedEventData = (ctx: BlockContext, eventItem: EventI
 
 export const getAssetsDepositEventData = (
 	ctx: BlockContext,
-	eventItem: EventItem<'Balances.Deposited'> | EventItem<'Tokens.Deposited'>,
+	event: Event<'Balances.Deposited'> | Event<'Tokens.Deposited'>,
 ): DepositEventData => {
-	if (eventItem.name === 'Balances.Deposited') {
-		return getBalancesDepositEventData(ctx, eventItem)
+	if (event.name === 'Balances.Deposited') {
+		return getBalancesDepositEventData(ctx, event)
 	} else {
-		return getTokensDepositedEventData(ctx, eventItem)
+		return getTokensDepositedEventData(ctx, event)
 	}
 }

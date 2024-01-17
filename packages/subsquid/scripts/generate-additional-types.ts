@@ -3,9 +3,9 @@ import { readFile, writeFile } from 'fs/promises'
 
 dotenv.config()
 
-function getVersionsFromClass(cls: { new (...args: any[]): any }) {
-	const keys = Object.getOwnPropertyNames(cls.prototype)
-	const versions = keys.filter((key) => key.startsWith('isV')).map((key) => key.slice(3))
+function getVersionsFromObject(obj: {}) {
+	const keys = Object.getOwnPropertyNames(obj)
+	const versions = keys.filter((key) => key.startsWith('v')).map((key) => key.slice(1))
 	return versions
 }
 
@@ -20,10 +20,10 @@ async function writeToFile(fileContent: string, pattern: RegExp, replacement: st
 }
 
 async function generateAdditionalTypes() {
-	const filePath = 'src/types/generated/calls.ts'
+	const filePath = 'src/types/generated/merged/calls.ts'
 
-	const calls = await import('../src/types/generated/calls')
-	const versions = getVersionsFromClass(calls.UtilityBatchAllCall)
+	const calls = await import('../src/types/generated/merged/calls')
+	const versions = getVersionsFromObject(calls.utility.batchAll)
 	const versionsArray = `[${versions.map((v) => `'${v}'`).join(', ')}] as const`
 	let fileContent = await readFile(filePath, 'utf8')
 	const variableName = 'utilityBatchAllCallVersions'

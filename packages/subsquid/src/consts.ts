@@ -1,5 +1,6 @@
-export const calls = [
-	'*',
+import { FieldSelection } from "@subsquid/substrate-processor"
+
+export const callNames = [
 	'Assets.register',
 	'Assets.transfer',
 	'LiquidityProxy.xorless_transfer',
@@ -52,10 +53,13 @@ export const calls = [
 	'Staking.unbond',
 	'Staking.validate',
 	'Staking.withdraw_unbonded',
+	'OrderBook.place_limit_order',
+	'OrderBook.cancel_limit_order',
+	'OrderBook.cancel_limit_orders_batch',
+	'Band.relay'
 ] as const
 
-export const events = [
-	'*',
+export const eventNames = [
 	'EthBridge.IncomingRequestFinalized',
 	'EthBridge.IncomingRequestFinalizationFailed',
 	'EthBridge.RequestRegistered',
@@ -83,4 +87,14 @@ export const events = [
 	'Staking.Rewarded',
 	'Staking.StakersElected',
 	'Staking.PayoutStarted',
+	'OrderBook.OrderBookCreated',
+	'OrderBook.OrderBookStatusChanged',
+	'OrderBook.LimitOrderPlaced',
+	'OrderBook.LimitOrderExecuted',
+	'OrderBook.LimitOrderUpdated',
+	'OrderBook.LimitOrderFilled',
+	'OrderBook.LimitOrderCanceled',
+	'OrderBook.MarketOrderExecuted',
+	'OrderBook.LimitOrderConvertedToMarketOrder',
+	'OrderBook.LimitOrderIsSplitIntoMarketOrderAndLimitOrder'
 ] as const

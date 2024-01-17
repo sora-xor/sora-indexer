@@ -1,0 +1,52 @@
+module.exports = class Data1705267315107 {
+    name = 'Data1705267315107'
+
+    async up(db) {
+        await db.query(`CREATE TABLE "updates_stream" ("id" character varying NOT NULL, "block" integer NOT NULL, "data" text NOT NULL, CONSTRAINT "PK_6981b5ab73f87c790815c258ac1" PRIMARY KEY ("id"))`)
+        await db.query(`CREATE TABLE "order_book_order" ("id" character varying NOT NULL, "type" character varying(6) NOT NULL, "order_id" integer, "created_at_block" integer NOT NULL, "timestamp" integer NOT NULL, "is_buy" boolean NOT NULL, "amount" text NOT NULL, "price" text NOT NULL, "lifetime" integer NOT NULL, "expires_at" integer NOT NULL, "amount_filled" text NOT NULL, "status" character varying(8) NOT NULL, "updated_at_block" integer NOT NULL, "order_book_id" character varying, "account_id" character varying, CONSTRAINT "PK_2f4fedde9968a582078f2014820" PRIMARY KEY ("id"))`)
+        await db.query(`CREATE INDEX "IDX_717dfb0316dd6e6e467ae9eba5" ON "order_book_order" ("order_book_id") `)
+        await db.query(`CREATE INDEX "IDX_f20f546fe7ec85eb1e11cda7c1" ON "order_book_order" ("account_id") `)
+        await db.query(`CREATE TABLE "order_book_snapshot" ("id" character varying NOT NULL, "timestamp" integer NOT NULL, "type" character varying(7) NOT NULL, "price" jsonb NOT NULL, "base_asset_volume" text NOT NULL, "quote_asset_volume" text NOT NULL, "volume_usd" text NOT NULL, "liquidity_usd" text NOT NULL, "order_book_id" character varying, CONSTRAINT "PK_8cc0ca876a7724426fd5e753ce2" PRIMARY KEY ("id"))`)
+        await db.query(`CREATE INDEX "IDX_724c7880b6d4d98762da9c3835" ON "order_book_snapshot" ("order_book_id") `)
+        await db.query(`CREATE TABLE "order_book" ("id" character varying NOT NULL, "dex_id" integer NOT NULL, "base_asset_reserves" numeric NOT NULL, "quote_asset_reserves" numeric NOT NULL, "status" character varying(14) NOT NULL, "price" text, "price_change_day" numeric, "volume_day_usd" text, "last_deals" text, "updated_at_block" integer NOT NULL, "base_asset_id" character varying, "quote_asset_id" character varying, CONSTRAINT "PK_629f498c4faa51af2e15727d61f" PRIMARY KEY ("id"))`)
+        await db.query(`CREATE INDEX "IDX_bdbe20250bd81b042dd8a3e9ff" ON "order_book" ("dex_id") `)
+        await db.query(`CREATE INDEX "IDX_dbbc17613a6b671b94909f948c" ON "order_book" ("base_asset_id") `)
+        await db.query(`CREATE INDEX "IDX_8fcdecd516789111a0e06a2207" ON "order_book" ("quote_asset_id") `)
+        await db.query(`ALTER TABLE "asset_snapshot" DROP COLUMN "liquidity"`)
+        await db.query(`ALTER TABLE "asset" DROP COLUMN "liquidity_usd"`)
+        await db.query(`ALTER TABLE "asset" ADD "liquidity_books" numeric`)
+        await db.query(`ALTER TABLE "asset" ALTER COLUMN "liquidity" DROP NOT NULL`)
+        await db.query(`CREATE INDEX "IDX_e3635f3b99a361a3bca4e123e1" ON "history_element" ("module") `)
+        await db.query(`CREATE INDEX "IDX_5efbff445643ab2a44563d40af" ON "history_element" ("method") `)
+        await db.query(`ALTER TABLE "order_book_order" ADD CONSTRAINT "FK_717dfb0316dd6e6e467ae9eba50" FOREIGN KEY ("order_book_id") REFERENCES "order_book"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`)
+        await db.query(`ALTER TABLE "order_book_order" ADD CONSTRAINT "FK_f20f546fe7ec85eb1e11cda7c13" FOREIGN KEY ("account_id") REFERENCES "account"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`)
+        await db.query(`ALTER TABLE "order_book_snapshot" ADD CONSTRAINT "FK_724c7880b6d4d98762da9c38357" FOREIGN KEY ("order_book_id") REFERENCES "order_book"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`)
+        await db.query(`ALTER TABLE "order_book" ADD CONSTRAINT "FK_dbbc17613a6b671b94909f948c0" FOREIGN KEY ("base_asset_id") REFERENCES "asset"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`)
+        await db.query(`ALTER TABLE "order_book" ADD CONSTRAINT "FK_8fcdecd516789111a0e06a22077" FOREIGN KEY ("quote_asset_id") REFERENCES "asset"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`)
+    }
+
+    async down(db) {
+        await db.query(`DROP TABLE "updates_stream"`)
+        await db.query(`DROP TABLE "order_book_order"`)
+        await db.query(`DROP INDEX "public"."IDX_717dfb0316dd6e6e467ae9eba5"`)
+        await db.query(`DROP INDEX "public"."IDX_f20f546fe7ec85eb1e11cda7c1"`)
+        await db.query(`DROP TABLE "order_book_snapshot"`)
+        await db.query(`DROP INDEX "public"."IDX_724c7880b6d4d98762da9c3835"`)
+        await db.query(`DROP TABLE "order_book"`)
+        await db.query(`DROP INDEX "public"."IDX_bdbe20250bd81b042dd8a3e9ff"`)
+        await db.query(`DROP INDEX "public"."IDX_dbbc17613a6b671b94909f948c"`)
+        await db.query(`DROP INDEX "public"."IDX_8fcdecd516789111a0e06a2207"`)
+        await db.query(`ALTER TABLE "asset_snapshot" ADD "liquidity" numeric`)
+        await db.query(`ALTER TABLE "asset" ADD "liquidity_usd" numeric`)
+        await db.query(`ALTER TABLE "asset" DROP COLUMN "liquidity_books"`)
+        await db.query(`ALTER TABLE "asset" ALTER COLUMN "liquidity" SET NOT NULL`)
+        await db.query(`DROP INDEX "public"."IDX_3f7829aff9e78f61dece09e907"`)
+        await db.query(`DROP INDEX "public"."IDX_e3635f3b99a361a3bca4e123e1"`)
+        await db.query(`DROP INDEX "public"."IDX_5efbff445643ab2a44563d40af"`)
+        await db.query(`ALTER TABLE "order_book_order" DROP CONSTRAINT "FK_717dfb0316dd6e6e467ae9eba50"`)
+        await db.query(`ALTER TABLE "order_book_order" DROP CONSTRAINT "FK_f20f546fe7ec85eb1e11cda7c13"`)
+        await db.query(`ALTER TABLE "order_book_snapshot" DROP CONSTRAINT "FK_724c7880b6d4d98762da9c38357"`)
+        await db.query(`ALTER TABLE "order_book" DROP CONSTRAINT "FK_dbbc17613a6b671b94909f948c0"`)
+        await db.query(`ALTER TABLE "order_book" DROP CONSTRAINT "FK_8fcdecd516789111a0e06a22077"`)
+    }
+}

@@ -1,20 +1,19 @@
-import { addDataToHistoryElement, createHistoryElement, updateHistoryElementStats } from '../../utils/history'
+import { addDataToHistoryElement, createCallHistoryElement, updateHistoryElementStats } from '../../utils/history'
 import { formatU128ToBalance, getAssetId } from '../../utils/assets'
 import { findEventsByExtrinsicHash, getAssetsTransferEventData } from '../../utils/events'
 import { poolsStorage } from '../../utils/pools'
-import { BlockContext, AssetAmount, CallItem } from '../../types'
-import { PoolXykWithdrawLiquidityCall } from '../../types/generated/calls'
-import { getEntityData } from '../../utils/entities'
+import { BlockContext, AssetAmount, Call } from '../../types'
+import { getCallData } from '../../utils/entities'
 import { logStartProcessingCall } from '../../utils/logs'
+import { calls } from '../../types/generated/merged'
+import { assertDefined } from '../../utils'
 
-export async function liquidityRemovalCallHandler(ctx: BlockContext, callItem: CallItem<'PoolXYK.withdraw_liquidity'>): Promise<void> {
-	logStartProcessingCall(ctx, callItem)
+export async function liquidityRemovalCallHandler(ctx: BlockContext, call: Call<'PoolXYK.withdraw_liquidity'>): Promise<void> {
+	logStartProcessingCall(ctx, call)
 
-	const extrinsicHash = callItem.extrinsic.hash
-	const historyElement = await createHistoryElement(ctx, callItem)
+	const historyElement = await createCallHistoryElement(ctx, call)
 
-	const call = new PoolXykWithdrawLiquidityCall(ctx, callItem.call)
-	const data = getEntityData(ctx, call, callItem)
+	const data = getCallData(ctx, calls.poolXyk.withdrawLiquidity, call)
 
 	const baseAssetId = getAssetId(data.outputAssetA)
 	const targetAssetId = getAssetId(data.outputAssetB)
@@ -30,7 +29,8 @@ export async function liquidityRemovalCallHandler(ctx: BlockContext, callItem: C
 	}
 
 	if (historyElement.execution.success) {
-		const transfers = findEventsByExtrinsicHash(ctx, extrinsicHash, ['Balances.Transfer', 'Tokens.Transfer'])
+		assertDefined(call.extrinsic)
+		const transfers = findEventsByExtrinsicHash(ctx, call.extrinsic.hash, ['Balances.Transfer', 'Tokens.Transfer'])
 
 		if (transfers.length === 2) {
 			const [baseAssetTransfer, targetAssetTransfer] = transfers

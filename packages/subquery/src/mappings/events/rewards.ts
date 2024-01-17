@@ -12,7 +12,7 @@ function getRewardData(event: SubstrateEvent): { stash: string; amount: string }
 	const stash = Array.isArray(data) ? data[0] : data.stash
 	const amount = Array.isArray(data) ? data[1] : data.amount
 
-	return { stash: stash.toString(), amount: formatU128ToBalance(amount, VAL) }
+	return { stash: stash.toString(), amount: formatU128ToBalance(amount.toString(), VAL) }
 }
 
 export async function stakingRewardedEventHandler(event: SubstrateEvent): Promise<void> {
@@ -25,12 +25,14 @@ export async function stakingRewardedEventHandler(event: SubstrateEvent): Promis
 	const payee = staker.payee
 	const id = `${stakingEra.id}-${getEventId(event)}-${staker.id}`
 
-	const stakingReward = new StakingReward(id)
-	stakingReward.stakerId = staker.id
+	const stakingReward = new StakingReward(
+		id,
+		amount,
+		staker.id,
+		stakingEra.id,
+		formatDateTimestamp(event.block.timestamp)
+	)
 	stakingReward.payee = payee
-	stakingReward.amount = amount
-	stakingReward.eraId = stakingEra.id
-	stakingReward.timestamp = formatDateTimestamp(event.block.timestamp)
 
 	await stakingReward.save()
 	getEventHandlerLog(event).debug({ stash, payee, amount, era: stakingEra.index }, 'Staking reward saved')

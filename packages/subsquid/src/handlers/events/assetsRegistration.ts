@@ -1,44 +1,43 @@
-import { EventItem, BlockContext } from '../../types'
-import { AssetsAssetRegisteredEvent, XstPoolSyntheticAssetEnabledEvent } from '../../types/generated/events'
-import { AssetsAssetInfosStorage } from '../../types/generated/storage'
-import { decodeAssetId, toReferenceSymbol } from '../../utils'
+import { Event, BlockContext } from '../../types'
+import { assertDefined, toReferenceSymbol } from '../../utils'
 import { assetPrecisions, getAssetId, assetStorage, tickerSyntheticAssetId } from '../../utils/assets'
-import { getEntityData } from '../../utils/entities'
+import { getStorageRepresentation, getEventData, findCurrentSpecVersion } from '../../utils/entities'
 import { getEventHandlerLog, logStartProcessingEvent } from '../../utils/logs'
+import { events, storage } from '../../types/generated/merged'
+import { assetRegistrationStream } from '../../utils/stream'
 
-export async function assetRegistrationEventHandler(ctx: BlockContext, eventItem: EventItem<'Assets.AssetRegistered'>): Promise<void> {
-	logStartProcessingEvent(ctx, eventItem)
+export async function assetRegistrationEventHandler(ctx: BlockContext, event: Event<'Assets.AssetRegistered'>): Promise<void> {
+	logStartProcessingEvent(ctx, event)
 
-	const event = new AssetsAssetRegisteredEvent(ctx, eventItem.event)
-
-	const [asset] = getEntityData(ctx, event, eventItem)
+	const [asset] = getEventData(ctx, events.assets.assetRegistered, event)
 	const assetId = getAssetId(asset)
 
+	const assetIdVersions = ['1', '26', '33Stage', '33Test'] as const
+	const assetId32Versions = ['42', '42Stage', '42Test', '70Dev'] as const
+	const data = assetIdVersions.includes(findCurrentSpecVersion(ctx, storage.assets.assetInfos, { kind: 'storage' }) as any)
+		? await getStorageRepresentation(ctx, storage.assets.assetInfos, assetId32Versions)?.get(ctx.block.header, assetId)
+		: await getStorageRepresentation(ctx, storage.assets.assetInfos, assetIdVersions)?.get(ctx.block.header, { code: assetId })
+	assertDefined(data)
+	const [symbol, name, decimals, _isMintable, content, description] = data
+
 	if (!assetPrecisions.has(assetId)) {
-		const storage = new AssetsAssetInfosStorage(ctx, ctx.block.header)
-		const [, , precision] =
-			storage.isV1 || storage.isV26
-				? await getEntityData(ctx, storage, { kind: 'storage', name: AssetsAssetInfosStorage.name }, ['42'] as const).get(
-						decodeAssetId(assetId),
-				  )
-				: await getEntityData(ctx, storage, { kind: 'storage', name: AssetsAssetInfosStorage.name }, ['1', '26'] as const).get({
-						code: decodeAssetId(assetId),
-				  })
-		assetPrecisions.set(assetId, precision)
+		assetPrecisions.set(assetId, decimals)
 	}
+
+	const assetData = { address: assetId, symbol, name, decimals, content, description }
+
+  	assetRegistrationStream.update(assetId, JSON.stringify(assetData))
 
 	await assetStorage.getAsset(ctx, assetId)
 }
 
 export async function syntheticAssetEnabledEventHandler(
 	ctx: BlockContext,
-	eventItem: EventItem<'XSTPool.SyntheticAssetEnabled'>,
+	event: Event<'XSTPool.SyntheticAssetEnabled'>,
 ): Promise<void> {
-	logStartProcessingEvent(ctx, eventItem)
+	logStartProcessingEvent(ctx, event)
 
-	const event = new XstPoolSyntheticAssetEnabledEvent(ctx, eventItem.event)
-
-	const data = getEntityData(ctx, event, eventItem)
+	const data = getEventData(ctx, events.xstPool.syntheticAssetEnabled, event)
 
 	if (!Array.isArray(data)) return
 
@@ -50,7 +49,7 @@ export async function syntheticAssetEnabledEventHandler(
 	// synthetic assets always have 18 decimals
 	assetPrecisions.set(assetId, 18)
 
-	getEventHandlerLog(ctx, eventItem).debug({ assetId, referenceSymbol }, 'Synthetic asset enabled')
+	getEventHandlerLog(ctx, event).debug({ assetId, referenceSymbol }, 'Synthetic asset enabled')
 
 	await assetStorage.getAsset(ctx, assetId)
 }

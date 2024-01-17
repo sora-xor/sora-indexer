@@ -17,10 +17,7 @@ export async function referrerRewardHandler(event: SubstrateEvent): Promise<void
 	let referrerReward = await ReferrerReward.get(key);
 
 	if (!referrerReward) {
-		referrerReward = new ReferrerReward(key);
-		referrerReward.referral = referral.toString();
-		referrerReward.referrer = referrer.toString();
-		referrerReward.amount = BigInt(0);
+		referrerReward = new ReferrerReward(key, referral.toString(), referrer.toString(), formatDateTimestamp(event.block.timestamp), BigInt(0));
 	}
 
 	referrerReward.updated = formatDateTimestamp(event.block.timestamp);
@@ -30,7 +27,12 @@ export async function referrerRewardHandler(event: SubstrateEvent): Promise<void
 	await referrerReward.save();
 
 	getEventHandlerLog(event).debug(
-		{ referral, referrer, amount, updated: referrerReward.updated },
+		{
+			referral: referrerReward.referral,
+			referrer: referrerReward.referrer,
+			amount: referrerReward.amount,
+			updated: referrerReward.updated
+		},
 		'Referrer reward updated',
 	)
 }

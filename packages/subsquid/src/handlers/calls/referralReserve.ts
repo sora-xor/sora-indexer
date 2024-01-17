@@ -1,17 +1,17 @@
-import { addDataToHistoryElement, createHistoryElement, updateHistoryElementStats } from '../../utils/history'
+import { addDataToHistoryElement, createCallHistoryElement, updateHistoryElementStats } from '../../utils/history'
 import { formatU128ToBalance } from '../../utils/assets'
 import { XOR } from '../../utils/consts'
-import { BlockContext, AssetAmount, CallItem } from '../../types'
-import { ReferralsReserveCall } from '../../types/generated/calls'
+import { BlockContext, AssetAmount, Call } from '../../types'
 import { findEventByExtrinsicHash, getAssetsTransferEventData } from '../../utils/events'
-import { getEntityData } from '../../utils/entities'
+import { getCallData } from '../../utils/entities'
 import { getCallHandlerLog, logStartProcessingCall } from '../../utils/logs'
+import { calls } from '../../types/generated/merged'
+import { assertDefined } from '../../utils'
 
-export async function referralReserveCallHandler(ctx: BlockContext, callItem: CallItem<'Referrals.reserve'>): Promise<void> {
-	logStartProcessingCall(ctx, callItem)
+export async function referralReserveCallHandler(ctx: BlockContext, call: Call<'Referrals.reserve'>): Promise<void> {
+	logStartProcessingCall(ctx, call)
 
-	const extrinsicHash = callItem.extrinsic.hash
-	const historyElement = await createHistoryElement(ctx, callItem)
+	const historyElement = await createCallHistoryElement(ctx, call)
 
 	let details: {
 		from?: string
@@ -21,25 +21,22 @@ export async function referralReserveCallHandler(ctx: BlockContext, callItem: Ca
 
 	if (historyElement.execution.success) {
 		const balancesTransferEventName = 'Balances.Transfer'
-		const balancesTransferEventItem = findEventByExtrinsicHash(ctx, extrinsicHash, [balancesTransferEventName], false) // TODO: Check if 'Currencies.Transferred' event is applicable here
+		assertDefined(call.extrinsic)
+		const balancesTransferEvent = findEventByExtrinsicHash(ctx, call.extrinsic.hash, [balancesTransferEventName], false) // TODO: Check if 'Currencies.Transferred' event is applicable here
 
-		if (!balancesTransferEventItem) {
+		if (!balancesTransferEvent) {
 			return
 		}
 
-		const { from, to, amount } = getAssetsTransferEventData(ctx, balancesTransferEventItem)
-
+		const { from, to, amount } = getAssetsTransferEventData(ctx, balancesTransferEvent)
 		details = {
 			from,
 			to,
 			amount: formatU128ToBalance(amount, XOR),
 		}
 	} else {
-		const call = new ReferralsReserveCall(ctx, callItem.call)
-		const data = getEntityData(ctx, call, callItem)
-
+		const data = getCallData(ctx, calls.referrals.reserve, call)
 		const amount = formatU128ToBalance(data.balance as AssetAmount, XOR)
-
 		details = {
 			amount,
 		}
@@ -48,5 +45,5 @@ export async function referralReserveCallHandler(ctx: BlockContext, callItem: Ca
 	if (details) await addDataToHistoryElement(ctx, historyElement, details)
 	await updateHistoryElementStats(ctx, historyElement)
 
-	getCallHandlerLog(ctx, callItem).debug(`Saved referral reserve`)
+	getCallHandlerLog(ctx, call).debug(`Saved referral reserve`)
 }
