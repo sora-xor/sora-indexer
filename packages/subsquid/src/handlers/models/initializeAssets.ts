@@ -148,7 +148,7 @@ export async function initializeAssets(ctx: BlockContext): Promise<void> {
 
 	getInitializeAssetsLog(ctx).debug('Initialize Asset entities')
 
-	// We don't use Promise.all() here because we need consistent order of requests in the log
+	// We don't use Promise.all here because we need consistent order of requests in the log
 	const assetInfos = await getAssetInfos(ctx)
 	const syntheticAssets = await getSyntheticAssets(ctx)
 	const bandRates = await getBandRates(ctx)
@@ -246,7 +246,12 @@ export async function initializeAssets(ctx: BlockContext): Promise<void> {
 
 	if (entities.length) {
 		// get or create entities in DB & memory
-		const created = await Promise.all(entities.map(entity => assetStorage.getAsset(ctx, entity.id as AssetId)));
+		// We don't use Promise.all here because we need consistent order of requests in the log
+		const created = [];
+        for (const entity of entities) {
+            const asset = await assetStorage.getAsset(ctx, entity.id as AssetId);
+            created.push(asset);
+        }
 		// update data in memory storage
 		created.forEach((entity) => {
 			Object.assign(entity, assets.get(entity.id))

@@ -142,7 +142,7 @@ export const getPoolProperties = async (ctx: BlockContext, baseAssetId: AssetId,
 
 class PoolAccountsStorage {
 	private storage: Map<AssetId, Map<AssetId, Address>>
-	private accountIds: Map<Address, [AssetId, AssetId]>
+	private accountIds: Map<string, [AssetId, AssetId]>
 
 	constructor() {
 		this.storage = new Map()
@@ -161,7 +161,7 @@ class PoolAccountsStorage {
 		return this.getMap(baseAssetId)?.get(targetAssetId)
 	}
 
-	getById(poolAccountId: Address) {
+	getById(poolAccountId: string) {
 		return this.accountIds.get(poolAccountId)
 	}
 
@@ -197,7 +197,7 @@ class PoolsStorage {
 		this.storage = new Map()
 	}
 
-	async getPoolById(ctx: BlockContext, poolId: Address): Promise<PoolXYK | null> {
+	async getPoolById(ctx: BlockContext, poolId: string): Promise<PoolXYK | null> {
 		let pool = this.storage.get(poolId)
 
 		if (pool) {
@@ -299,7 +299,7 @@ class PoolsStorage {
 		return lockedUSD
 	  }
 
-	async updateApy(ctx: BlockContext, id: Address, strategicBonusApy: string): Promise<void> {
+	async updateApy(ctx: BlockContext, id: string, strategicBonusApy: string): Promise<void> {
 	  const pool = await this.getPoolById(ctx, id)
 
 	  assertDefined(pool)

@@ -1,6 +1,6 @@
 import BigNumber from 'bignumber.js'
 
-import { OrderBook, OrderBookStatus, SnapshotType, OrderBookSnapshot, OrderBookDeal, AssetPrice } from '../model'
+import { OrderBook, OrderBookStatus, SnapshotType, OrderBookSnapshot, OrderBookDeal, AssetPrice, OrderStatus } from '../model'
 
 import { getOrderBooksStorageLog, getOrderBooksSnapshotsStorageLog } from './logs'
 import { getSnapshotIndex, prevSnapshotsIndexesRow, last, calcPriceChange, shouldUpdate, assertDefined, getBlockTimestamp, getSnapshotTypes, toAssetId, toAddress } from './index'
@@ -90,6 +90,31 @@ const getAssetIdFromTech = (techAsset: TechAssetId): AssetId => {
 }
 
 const OrderBooksSnapshots = [SnapshotType.DEFAULT, SnapshotType.HOUR, SnapshotType.DAY]
+
+
+export const getBookStatus = (status: 'OnlyCancel' | 'PlaceAndCancel' | 'Stop' | 'Trade'): OrderBookStatus => {
+	switch (status) {
+		case 'OnlyCancel':
+			return OrderBookStatus.OnlyCancel
+		case 'PlaceAndCancel':
+			return OrderBookStatus.PlaceAndCancel
+		case 'Stop':
+			return OrderBookStatus.Stop
+		case 'Trade':
+			return OrderBookStatus.Trade
+	}
+}
+
+export const getOrderStatus = (status: 'Manual' | 'Expired' | 'Aligned'): OrderStatus => {
+	switch (status) {
+		case 'Manual':
+			return OrderStatus.Canceled
+		case 'Expired':
+			return OrderStatus.Expired
+		case 'Aligned':
+			return OrderStatus.Aligned
+	}
+}
 
 export class OrderBooksStorage {
 	private storage!: Map<string, OrderBook>
@@ -370,8 +395,6 @@ export class OrderBooksSnapshotsStorage {
 		if (!snapshot) {
 			const orderBook = await this.orderBooksStorage.getOrderBook(ctx, dexId, baseAssetId, quoteAssetId)
 
-			assertDefined(orderBook.price)
-
 			snapshot = new OrderBookSnapshot()
 			snapshot.id = id
 			snapshot.orderBook = orderBook
@@ -382,12 +405,13 @@ export class OrderBooksSnapshotsStorage {
 			snapshot.volumeUSD = '0'
 			snapshot.liquidityUSD = '0'
 			snapshot.price = new AssetPrice({
-				open: orderBook.price,
-				close: orderBook.price,
-				high: orderBook.price,
-				low: orderBook.price,
+				open: orderBook.price ?? '0',
+				close: orderBook.price ?? '0',
+				high: orderBook.price ?? '0',
+				low: orderBook.price ?? '0',
 			})
 
+			// TODO: Add orderBook args to log
 			getOrderBooksSnapshotsStorageLog(ctx).debug({ id }, 'Order Book snapshot created')
 		}
 

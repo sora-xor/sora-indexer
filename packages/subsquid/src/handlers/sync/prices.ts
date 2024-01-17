@@ -133,7 +133,7 @@ export async function syncPoolXykPrices(ctx: BlockContext): Promise<void> {
                         .multipliedBy(new BigNumber(pool.multiplier))
                         .toFixed(18)
 
-                    await poolsStorage.updateApy(ctx, toAddress(pool.id), strategicBonusApy)
+                    await poolsStorage.updateApy(ctx, pool.id, strategicBonusApy)
                 }
 			}
 		}

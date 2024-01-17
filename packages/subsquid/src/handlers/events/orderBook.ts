@@ -3,47 +3,34 @@ import BigNumber from 'bignumber.js'
 import { getBlockTimestamp } from '../../utils'
 import { getAccountEntity } from '../../utils/account'
 import { getAssetId, formatU128ToBalance } from '../../utils/assets'
-import { OrderBooksStorage, orderBooksStorage, orderBooksSnapshotsStorage } from '../../utils/orderBook'
+import { OrderBooksStorage, orderBooksStorage, orderBooksSnapshotsStorage, getOrderStatus, getBookStatus } from '../../utils/orderBook'
 import { getEventHandlerLog, logStartProcessingEvent } from '../../utils/logs'
 import { BlockContext, Event } from '../../types'
-import { OrderBookOrder, OrderBookStatus, OrderStatus, OrderType } from '../../model'
+import { OrderBookOrder, OrderStatus, OrderType } from '../../model'
 import { getEventData } from '../../utils/entities'
 import { events } from '../../types/generated/merged'
+import { Bytes } from '../../types/generated/production/support'
 
-const getBookData = (orderBookCodec: any) => {
-	const dexId = orderBookCodec.dexId.toNumber()
-	const baseAssetId = getAssetId(orderBookCodec.base)
-	const quoteAssetId = getAssetId(orderBookCodec.quote)
+interface AssetId32 {
+	code: Bytes
+}
+
+interface OrderBookId {
+    dexId: number
+    base: AssetId32
+    quote: AssetId32
+}
+
+const getBookData = (orderBook: OrderBookId) => {
+	const dexId = orderBook.dexId
+	const baseAssetId = getAssetId(orderBook.base)
+	const quoteAssetId = getAssetId(orderBook.quote)
 
 	return { dexId, baseAssetId, quoteAssetId }
 }
 
-const getBookStatus = (status: 'OnlyCancel' | 'PlaceAndCancel' | 'Stop' | 'Trade'): OrderBookStatus => {
-	switch (status) {
-		case 'OnlyCancel':
-			return OrderBookStatus.OnlyCancel
-		case 'PlaceAndCancel':
-			return OrderBookStatus.PlaceAndCancel
-		case 'Stop':
-			return OrderBookStatus.Stop
-		case 'Trade':
-			return OrderBookStatus.Trade
-	}
-}
-
-const getOrderStatus = (status: 'Manual' | 'Expired' | 'Aligned'): OrderStatus => {
-	switch (status) {
-		case 'Manual':
-			return OrderStatus.Canceled
-		case 'Expired':
-			return OrderStatus.Expired
-		case 'Aligned':
-			return OrderStatus.Aligned
-	}
-}
-
-const getOrderData = (orderBookCodec: any, orderId: bigint | string) => {
-	const { dexId, baseAssetId, quoteAssetId } = getBookData(orderBookCodec)
+const getOrderData = (orderBook: OrderBookId, orderId: bigint | string) => {
+	const { dexId, baseAssetId, quoteAssetId } = getBookData(orderBook)
 	const orderBookId = OrderBooksStorage.getId(dexId, baseAssetId, quoteAssetId)
 	const id = OrderBooksStorage.getOrderId(orderBookId, orderId)
 
@@ -206,13 +193,14 @@ export async function orderBookLimitOrderCanceledEventHandler(ctx: BlockContext,
 	}
 }
 
-export async function orderBookMarketOrderEventHandler(
+export async function orderBookMarketOrderExecutedEventHandler(
 	ctx: BlockContext,
-	event: Event<'OrderBook.MarketOrderExecuted'> | Event<'OrderBook.LimitOrderConvertedToMarketOrder'> | Event<'OrderBook.LimitOrderIsSplitIntoMarketOrderAndLimitOrder'>
+	event: Event<'OrderBook.MarketOrderExecuted'>
 ): Promise<void> {
 	logStartProcessingEvent(ctx, event)
 
-	const { orderBookId, ownerId, direction, amount, averagePrice } = getEventData(ctx, events.orderBook.marketOrderExecuted, event)
+	const data = getEventData(ctx, events.orderBook.marketOrderExecuted, event)
+	const { orderBookId, ownerId, direction, amount, averagePrice } = data
 
 	const blockHeight = ctx.block.header.height
 	const timestamp = getBlockTimestamp(ctx)
@@ -238,6 +226,88 @@ export async function orderBookMarketOrderEventHandler(
 	marketOrder.lifetime = 0
 	marketOrder.expiresAt = timestamp
 	marketOrder.amountFilled = formatU128ToBalance(amount.value.inner, baseAssetId)
+	marketOrder.status = OrderStatus.Filled
+	marketOrder.updatedAtBlock = blockHeight
+
+	await ctx.store.save(marketOrder)
+
+	getEventHandlerLog(ctx, event).debug({ id }, 'Market Order Saved')
+}
+
+export async function orderBookLimitOrderConvertedToMarketOrderEventHandler(
+	ctx: BlockContext,
+	event: Event<'OrderBook.LimitOrderConvertedToMarketOrder'>
+): Promise<void> {
+	logStartProcessingEvent(ctx, event)
+
+	const data = getEventData(ctx, events.orderBook.limitOrderConvertedToMarketOrder, event)
+	const { orderBookId, ownerId, direction, amount, averagePrice } = data
+
+	const blockHeight = ctx.block.header.height
+	const timestamp = getBlockTimestamp(ctx)
+
+	const eventIndex = event.index
+	const orderId = `${blockHeight}-${eventIndex}`
+
+	const { id, dexId, baseAssetId, quoteAssetId } = getOrderData(orderBookId, orderId)
+
+	const book = await orderBooksStorage.getOrderBook(ctx, dexId, baseAssetId, quoteAssetId)
+	const account = await getAccountEntity(ctx, ownerId.toString())
+
+	const marketOrder = new OrderBookOrder()
+	marketOrder.id = id
+	marketOrder.type = OrderType.Market
+	marketOrder.orderBook = book
+	marketOrder.account = account
+	marketOrder.createdAtBlock = blockHeight
+	marketOrder.timestamp = timestamp
+	marketOrder.isBuy = direction.__kind === 'Buy'
+	marketOrder.amount = formatU128ToBalance(amount.value.inner, baseAssetId)
+	marketOrder.price = averagePrice ? formatU128ToBalance(averagePrice.inner, quoteAssetId) : '0'
+	marketOrder.lifetime = 0
+	marketOrder.expiresAt = timestamp
+	marketOrder.amountFilled = formatU128ToBalance(amount.value.inner, baseAssetId)
+	marketOrder.status = OrderStatus.Filled
+	marketOrder.updatedAtBlock = blockHeight
+
+	await ctx.store.save(marketOrder)
+
+	getEventHandlerLog(ctx, event).debug({ id }, 'Market Order Saved')
+}
+
+export async function orderBookLimitOrderIsSplitIntoMarketOrderAndLimitOrderEventHandler(
+	ctx: BlockContext,
+	event: Event<'OrderBook.LimitOrderIsSplitIntoMarketOrderAndLimitOrder'>
+): Promise<void> {
+	logStartProcessingEvent(ctx, event)
+
+	const data = getEventData(ctx, events.orderBook.limitOrderIsSplitIntoMarketOrderAndLimitOrder, event)
+	const { orderBookId, ownerId, marketOrderDirection, marketOrderAmount, marketOrderAveragePrice } = data
+
+	const blockHeight = ctx.block.header.height
+	const timestamp = getBlockTimestamp(ctx)
+
+	const eventIndex = event.index
+	const orderId = `${blockHeight}-${eventIndex}`
+
+	const { id, dexId, baseAssetId, quoteAssetId } = getOrderData(orderBookId, orderId)
+
+	const book = await orderBooksStorage.getOrderBook(ctx, dexId, baseAssetId, quoteAssetId)
+	const account = await getAccountEntity(ctx, ownerId.toString())
+
+	const marketOrder = new OrderBookOrder()
+	marketOrder.id = id
+	marketOrder.type = OrderType.Market
+	marketOrder.orderBook = book
+	marketOrder.account = account
+	marketOrder.createdAtBlock = blockHeight
+	marketOrder.timestamp = timestamp
+	marketOrder.isBuy = marketOrderDirection.__kind === 'Buy'
+	marketOrder.amount = formatU128ToBalance(marketOrderAmount.value.inner, baseAssetId)
+	marketOrder.price = marketOrderAveragePrice ? formatU128ToBalance(marketOrderAveragePrice.inner, quoteAssetId) : '0'
+	marketOrder.lifetime = 0
+	marketOrder.expiresAt = timestamp
+	marketOrder.amountFilled = formatU128ToBalance(marketOrderAmount.value.inner, baseAssetId)
 	marketOrder.status = OrderStatus.Filled
 	marketOrder.updatedAtBlock = blockHeight
 

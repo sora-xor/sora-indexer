@@ -42,6 +42,8 @@ let logIndex = 0
 const endBlock = parseInt(process.env.END_BLOCK) || Number.MAX_VALUE
 const startBlockSubsquid = parseInt(process.env.START_BLOCK_SUBSQUID) || 0
 const startBlockSubquery = parseInt(process.env.START_BLOCK_SUBQUERY) || 0
+const showProgressSubsquid = process.env.SHOW_PROGRESS_SUBSQUID ? process.env.SHOW_PROGRESS_SUBSQUID === 'true' : true
+const showProgressSubquery = process.env.SHOW_PROGRESS_SUBQUERY ? process.env.SHOW_PROGRESS_SUBQUERY === 'true' : true
 
 const subsquidRegex = /\{"level":\d+,"time":\d+,"ns":"[^"]+","msg":"[^"]+","blockHeight":\d+(?:,"[^"]+":(?:"[^"]+"|\d+))*\}/
 
@@ -66,7 +68,7 @@ function generateSubsquidScriptAndRun() {
 
     subsquidScript.stdout.on('data', (data: Buffer) => {
       const dataString = data.toString()
-      if (logIndex === 0) {
+      if (logIndex === 0 && showProgressSubsquid) {
         console.log(chalk.cyan(dataString))
       }
       handleSubsquid(dataString)
@@ -74,7 +76,7 @@ function generateSubsquidScriptAndRun() {
 
     subsquidScript.stderr.on('data', (data: Buffer) => {
       const dataString = data.toString()
-      if (logIndex === 0) {
+      if (logIndex === 0 && showProgressSubsquid) {
         console.log(chalk.cyan(dataString))
       }
       handleSubsquid(dataString)
@@ -94,17 +96,17 @@ function generateSubqueryScriptAndRun() {
     
     subqueryScript.stdout.on('data', (data: Buffer) => {
       const dataString = data.toString()
-      // if (logIndex === 0) {
-      //   console.log(chalk.blue(dataString))
-      // }
+      if (logIndex === 0 && showProgressSubquery) {
+        console.log(chalk.blue(dataString))
+      }
       handleSubquery(dataString)
     })
 
     subqueryScript.stderr.on('data', (data: Buffer) => {
       const dataString = data.toString()
-      // if (logIndex === 0) {
-      //   console.log(chalk.blue(dataString))
-      // }
+      if (logIndex === 0 && showProgressSubquery) {
+        console.log(chalk.blue(dataString))
+      }
       handleSubquery(dataString)
     })
 
@@ -137,12 +139,11 @@ function handleSubsquid(data: string) {
 
   logLines.forEach((line, index) => {
     const messageLine = subsquidRegex.exec(line)?.[0]
-
+ 
     if (messageLine) {
       processLine(messageLine)
       subsquidLastLines = ''
-    } else {
-      console.log(subsquidLastLines.length, line.length, index)
+    } else if (index > 0) {
       subsquidLastLines = subsquidLastLines + line
       const messageLineCombined = subsquidRegex.exec(subsquidLastLines)?.[0]
       if (messageLineCombined) {
