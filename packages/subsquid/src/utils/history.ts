@@ -101,7 +101,8 @@ export const createHistoryElement = async (
 	}
 
 	await ctx.store.save(historyElement)
-	const { calls, callNames, execution, ...logArguments } = historyElement
+	// TODO: return 'name' to the log
+	const { calls, callNames, execution, name, ...logArguments } = historyElement
 	getUtilsLog(ctx).debug({ ...logArguments, executionSuccess: execution.success + '' }, 'Created history element')
 
 	if (data) {
