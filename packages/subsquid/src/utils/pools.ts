@@ -3,12 +3,13 @@ import { AssetAmount, BlockContext } from '../types'
 import { XOR, DOUBLE_PRICE_POOL } from './consts'
 import { assertDefined, toAddress, toAssetId } from '.'
 import { AssetId, Address } from '../types'
-import { getStorageRepresentation } from './entities'
+import { getStorageRepresentation, isCurrentVersionIncluded } from './entities'
 import { assetStorage, getAssetId, assetPrecisions } from './assets'
 import { getInitializePoolsLog, getPoolsStorageLog } from './logs'
 import { storage } from '../types/generated/merged'
 import { poolXykApyUpdatesStream } from './stream'
 import BigNumber from 'bignumber.js'
+import { versionsWithStringAssetId } from '../consts'
 
 // getters & setter for flag, should we sync poolXYK reserves
 // and then calc asset prices
@@ -22,18 +23,47 @@ export const PoolsPrices = {
 	},
 }
 
+async function getPoolXYKReserves(ctx: BlockContext, assetIdA: AssetId, assetIdB?: AssetId) {
+	const types = storage.poolXyk.reserves
+	const representationString = getStorageRepresentation(ctx, types, { kind: 'include', versions: versionsWithStringAssetId })
+	const representationAsset32 = getStorageRepresentation(ctx, types, { kind: 'exclude', versions: versionsWithStringAssetId })
+
+	let data = isCurrentVersionIncluded(ctx, types, { kind: 'storage' }, versionsWithStringAssetId)
+		? await (assetIdB
+			? representationString?.getPairs(ctx.block.header, assetIdA, assetIdB)
+			: representationString?.getPairs(ctx.block.header, assetIdA)
+		)
+		: await (assetIdB
+			? representationAsset32?.getPairs(ctx.block.header, { code: assetIdA }, { code: assetIdB })
+			: representationAsset32?.getPairs(ctx.block.header, { code: assetIdA })
+		)
+
+	return data
+}
+
+async function getPoolXYKProperties(ctx: BlockContext, assetIdA: AssetId, assetIdB?: AssetId) {
+	const types = storage.poolXyk.properties
+	const representationString = getStorageRepresentation(ctx, types, { kind: 'include', versions: versionsWithStringAssetId })
+	const representationAsset32 = getStorageRepresentation(ctx, types, { kind: 'exclude', versions: versionsWithStringAssetId })
+
+	let data = isCurrentVersionIncluded(ctx, types, { kind: 'storage' }, versionsWithStringAssetId)
+		? await (assetIdB
+			? representationString?.getPairs(ctx.block.header, assetIdA, assetIdB)
+			: representationString?.getPairs(ctx.block.header, assetIdA)
+		)
+		: await (assetIdB
+			? representationAsset32?.getPairs(ctx.block.header, { code: assetIdA }, { code: assetIdB })
+			: representationAsset32?.getPairs(ctx.block.header, { code: assetIdA })
+		)
+
+	return data
+}
+
 export const getAllReserves = async (ctx: BlockContext, baseAssetId: AssetId) => {
 	try {
 		getInitializePoolsLog(ctx).debug({ baseAssetId }, 'Pools XYK Reserves request...')
-		const data = storage.poolXyk.reserves.v1.is(ctx.block.header)
-			? await getStorageRepresentation(ctx, storage.poolXyk.reserves, ['42'] as const)?.getPairs(
-				ctx.block.header,
-				baseAssetId,
-			)
-			: await getStorageRepresentation(ctx, storage.poolXyk.reserves, ['1'] as const)?.getPairs(
-				ctx.block.header,
-				{ code: baseAssetId },
-			)
+
+		const data = await getPoolXYKReserves(ctx, baseAssetId)
 
 		assertDefined(data)
 
@@ -54,6 +84,7 @@ export const getAllReserves = async (ctx: BlockContext, baseAssetId: AssetId) =>
 	} catch (e: any) {
 		getInitializePoolsLog(ctx).error('Error getting Reserves')
 		getInitializePoolsLog(ctx).error(e)
+		console.error(e)
 		return null
 	}
 }
@@ -61,18 +92,8 @@ export const getAllReserves = async (ctx: BlockContext, baseAssetId: AssetId) =>
 export const getAllProperties = async (ctx: BlockContext, baseAssetId: AssetId) => {
 	try {
 		getInitializePoolsLog(ctx).debug({ baseAssetId }, 'Pools XYK Properties request...')
-		const data =
-			storage.poolXyk.properties.v1.is(ctx.block.header) || storage.poolXyk.properties.v7.is(ctx.block.header)
-				? await getStorageRepresentation(
-					ctx,
-					storage.poolXyk.properties,
-					['42'] as const,
-				)?.getPairs(ctx.block.header, baseAssetId)
-				: await getStorageRepresentation(
-					ctx,
-					storage.poolXyk.properties,
-					['1', '7'] as const,
-				)?.getPairs(ctx.block.header, { code: baseAssetId })
+
+		const data = await getPoolXYKProperties(ctx, baseAssetId)
 
 		assertDefined(data)
 
@@ -92,6 +113,7 @@ export const getAllProperties = async (ctx: BlockContext, baseAssetId: AssetId) 
 	} catch (e: any) {
 		getInitializePoolsLog(ctx).error('Error getting Properties')
 		getInitializePoolsLog(ctx).error(e)
+		console.error(e)
 		return null
 	}
 }
@@ -101,18 +123,8 @@ export const getPoolProperties = async (ctx: BlockContext, baseAssetId: AssetId,
 
 	try {
 		getInitializePoolsLog(ctx).debug({ baseAssetId, targetAssetId }, 'Pool properties request...')
-		const data =
-			storage.poolXyk.properties.v1.is(ctx.block.header) || storage.poolXyk.properties.v7.is(ctx.block.header)
-				? await getStorageRepresentation(
-					ctx,
-					storage.poolXyk.properties,
-					['42'] as const,
-				)?.getPairs(ctx.block.header, baseAssetId, targetAssetId)
-				: await getStorageRepresentation(
-					ctx,
-					storage.poolXyk.properties,
-					['1', '7'] as const,
-				)?.getPairs(ctx.block.header, { code: baseAssetId }, { code: targetAssetId })
+
+		const data = await getPoolXYKProperties(ctx, baseAssetId, targetAssetId)
 
 		assertDefined(data)
 

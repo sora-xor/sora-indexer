@@ -8,17 +8,20 @@ import { events } from '../../types/generated/production'
 export async function referrerRewardEventHandler(ctx: BlockContext, event: Event<'XorFee.ReferrerRewarded'>): Promise<void> {
 	logStartProcessingEvent(ctx, event)
 
-	const [referral, referrer, amount] = getEventData(ctx, events.xorFee.referrerRewarded, event)
+	const data = getEventData(ctx, events.xorFee.referrerRewarded, event)
+	const referral = toAddress(data[0])
+	const referrer = toAddress(data[1])
+	const amount = data[2]
 
-	const key = `${toAddress(referral)}-${toAddress(referrer)}`
+	const key = `${referral}-${referrer}`
 
 	let referrerReward = await ctx.store.get(ReferrerReward, key)
 
 	if (!referrerReward) {
 		referrerReward = new ReferrerReward()
 		referrerReward.id = key
-		referrerReward.referral = toAddress(referral)
-		referrerReward.referrer = toAddress(referrer)
+		referrerReward.referral = referral
+		referrerReward.referrer = referrer
 		referrerReward.amount = 0n
 		referrerReward.updated = getBlockTimestamp(ctx)
 	}
@@ -29,5 +32,5 @@ export async function referrerRewardEventHandler(ctx: BlockContext, event: Event
 	referrerReward.amount = referrerReward.amount + amount
 
 	await ctx.store.save(referrerReward)
-	getEventHandlerLog(ctx, event).debug({ referral, referrer, amount, updated: referrerReward.updated }, 'Referrer reward updated')
+	getEventHandlerLog(ctx, event).debug({ referral, referrer, amount: referrerReward.amount, updated: referrerReward.updated }, 'Referrer reward updated')
 }

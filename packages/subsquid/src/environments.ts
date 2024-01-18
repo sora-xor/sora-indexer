@@ -62,7 +62,7 @@ export const environments: Environments = {
 		name: 'sora-test',
 		description: 'Sora test squid',
 		version: 1,
-		chain: 'wss://ws.framenode-1.v1.tst.sora2.soramitsu.co.jp',
+		chain: 'wss://ws.framenode-3.r0.tst.sora2.soramitsu.co.jp',
 		archive: null,
 		storage: '100G',
 		scaleProfiles: {

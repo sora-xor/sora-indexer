@@ -44,6 +44,7 @@ const startBlockSubsquid = parseInt(process.env.START_BLOCK_SUBSQUID) || 0
 const startBlockSubquery = parseInt(process.env.START_BLOCK_SUBQUERY) || 0
 const showProgressSubsquid = process.env.SHOW_PROGRESS_SUBSQUID ? process.env.SHOW_PROGRESS_SUBSQUID === 'true' : true
 const showProgressSubquery = process.env.SHOW_PROGRESS_SUBQUERY ? process.env.SHOW_PROGRESS_SUBQUERY === 'true' : true
+const saveLog = process.env.SAVE_LOG ? process.env.SAVE_LOG === 'true' : true
 
 const subsquidRegex = /\{"level":\d+,"time":\d+,"ns":"[^"]+","msg":"[^"]+","blockHeight":\d+(?:,"[^"]+":(?:"[^"]+"|\d+))*\}/
 
@@ -53,7 +54,7 @@ const subqueryMessageArgumentRegex = /[\w\d\-_]+\s+\|\s{41}\s+(\w+):\s([^\n]+)/
 const colorRegex = /\x1B\[\d+m/g
 
 generateSubsquidScriptAndRun()
-generateSubqueryScriptAndRun()
+setTimeout(generateSubqueryScriptAndRun, 20_000)
 
 let subsquidReady = false
 let subqueryReady = false
@@ -62,7 +63,7 @@ let subsquidLastLines = ''
 let newSubqueryLog: LogDataSubquery = { msg: null, blockHeight: '' }
 
 function generateSubsquidScriptAndRun() {
-  let script = 'export INDEXER_ENVIRONMENT=dev\n' + 'export INDEXER_START_BLOCK=' + startBlockSubsquid + '\n' + 'export INDEXER_TEST_LOG_MODE=true\n' + 'cd ../subsquid\n' + 'npm run process:clean\n' + 'echo in dev\n'
+  let script = 'export INDEXER_ENVIRONMENT=production\n' + 'export INDEXER_START_BLOCK=' + startBlockSubsquid + '\n' + 'export INDEXER_TEST_LOG_MODE=true\n' + 'cd ../subsquid\n' + 'npm run process:clean\n' + 'echo in dev\n'
   fs.writeFile('data/subsquid.sh', script, (e) => {
     subsquidScript = spawn('sh', ['data/subsquid.sh'])
 
@@ -90,7 +91,7 @@ function generateSubsquidScriptAndRun() {
 
 function generateSubqueryScriptAndRun() {
   let script =
-    'export INDEXER_START_BLOCK=' + startBlockSubquery + '\n' + 'export INDEXER_TEST_LOG_MODE=true\n' + 'cd ../subquery && ls\n' + 'npm run config:chainId:update\n' + 'npm run process:clean\n'
+    'export INDEXER_TEST_LOG_MODE=true\n' + 'cd ../subquery && ls\n' + 'npm run config:chainId:update\n' + 'npm run config:startBlock -- -b='+startBlockSubquery+'\n' + 'npm run process:clean\n'
   fs.writeFile('data/subquery.sh', script, (e) => {
     subqueryScript = spawn('sh', ['data/subquery.sh'])
     
@@ -128,6 +129,7 @@ function handleSubsquid(data: string) {
     if (dataJson.blockHeight > endBlock) {
       subsquidReady = true
       kill(subsquidScript.pid)
+      if (saveLog)
       fs.writeFile('logSubsquid.json', JSON.stringify(logSubsquid, null, 2), (e) => {})
       console.log('Subsquid work finished')
     }
@@ -167,6 +169,7 @@ function handleSubquery(data: string) {
       if (parseInt(newSubqueryLog.blockHeight) > endBlock) {
         subqueryReady = true
         kill(subqueryScript.pid)
+        if (saveLog)
         fs.writeFile('logSubquery.json', JSON.stringify(logSubquery, null, 2), (e) => {})
         console.log('Subquery work finished')
       }
@@ -176,10 +179,6 @@ function handleSubquery(data: string) {
       }
       newSubqueryLog = { msg: newMessageLine[1], blockHeight: '' }
     }
-
-    // if (!newMessageLine && !messageArgumentLine) {
-    //   console.log(chalk.yellow('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'), line)
-    // }
 
     if (messageArgumentLine) {
       newSubqueryLog[messageArgumentLine[1]] = messageArgumentLine[2].trim()

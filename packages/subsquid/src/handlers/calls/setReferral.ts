@@ -3,6 +3,7 @@ import { addDataToHistoryElement, createCallHistoryElement, updateHistoryElement
 import { getCallData } from '../../utils/entities'
 import { getCallHandlerLog, logStartProcessingCall } from '../../utils/logs'
 import { calls } from '../../types/generated/merged'
+import { toAddress } from '../../utils'
 
 export async function setReferralCallHandler(ctx: BlockContext, call: Call<'Referrals.set_referrer'>): Promise<void> {
 	logStartProcessingCall(ctx, call)
@@ -14,7 +15,7 @@ export async function setReferralCallHandler(ctx: BlockContext, call: Call<'Refe
 
 	const data = getCallData(ctx, calls.referrals.setReferrer, call)
 
-	const referrer = data.referrer
+	const referrer = toAddress(data.referrer)
 
 	details = {
 		from: historyElement.address,

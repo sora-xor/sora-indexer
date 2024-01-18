@@ -60,7 +60,7 @@ export async function initializeOrderBooks(ctx: BlockContext): Promise<void> {
 	if (entities.length) {
 		// get or create entities in DB & memory
     	// We don't use Promise.all here because we need consistent order of requests in the log
-		const created = []
+		const created: OrderBook[] = []
 		for (const { dexId, baseAsset, quoteAsset } of entities) {
 			const orderBook = await orderBooksStorage.getOrderBook(ctx, dexId, baseAsset.id, quoteAsset.id)
 			created.push(orderBook)
@@ -71,7 +71,6 @@ export async function initializeOrderBooks(ctx: BlockContext): Promise<void> {
 		})
 		// save in DB
 		for (const entity of created) {
-			console.log('orderBook: ', entity)
 			await ctx.store.save(entity)
 		}
 		getInitializeOrderBooksLog(ctx).debug(`${entities.length} Order Books initialized!`)

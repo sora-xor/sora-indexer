@@ -78,7 +78,7 @@ export async function initializePools(ctx: BlockContext): Promise<void> {
 	if (entities.length) {
         // get or create entities in DB & memory
         // We don't use Promise.all here because we need consistent order of requests in the log
-        const created = []
+        const created: PoolXYK[] = []
         for (const entity of entities) {
             const pool = await poolsStorage.getPoolById(ctx, entity.id as Address)
 			if (pool) {

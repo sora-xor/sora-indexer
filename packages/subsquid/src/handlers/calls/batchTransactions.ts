@@ -3,26 +3,26 @@ import { formatU128ToBalance, getAssetId } from '../../utils/assets'
 import { poolsStorage } from '../../utils/pools'
 import { BlockContext, Call } from '../../types'
 import { calls as generatedCalls } from '../../types/generated/merged'
-import { utilityBatchAllCallVersions } from '../../types/generated/merged/calls'
 import { HistoryElement, HistoryElementCall } from '../../model'
 import { AssetId } from '../../types'
 import { toCamelCase } from '../../utils'
+import { getCallData } from '../../utils/entities'
 import { toJSON } from '@subsquid/util-internal-json'
 import { logStartProcessingCall } from '../../utils/logs'
 
-type Version = (typeof utilityBatchAllCallVersions)[number] 
-type VersionRepresentation = { [V in Version]: `v${V}` }[Version]
+type Version = Exclude<keyof typeof generatedCalls.utility.batchAll, 'name'>
+type Calls = ReturnType<typeof getCallData<typeof generatedCalls.utility.batchAll, 'exclude', []>>['calls']
 
 type BatchCall = {
 	[V in Version]: {
 		version: V
-		call: ReturnType<typeof generatedCalls.utility.batchAll[`v${V}`]['decode']>['calls'][number]
+		call: Calls[number]
 	}
 }[Version]
 type BatchCalls = {
 	[V in Version]: {
 		version: V
-		calls: ReturnType<typeof generatedCalls.utility.batchAll[`v${V}`]['decode']>['calls']
+		calls: Calls
 	}
 }[Version]
 
@@ -100,13 +100,14 @@ function mapCallsForAllVersions(
 	historyElement: HistoryElement,
 ): HistoryElementCall[] {
 	let calls: HistoryElementCall[] | null = null
-	utilityBatchAllCallVersions.forEach((version) => {
-		if (generatedCalls.utility.batchAll[`v${version}`].is(call)) {
+	const versions = Object.keys(generatedCalls.utility.batchAll).filter(v => v !== 'name') as Version[]
+	versions.forEach((version: Version) => {
+		if (generatedCalls.utility.batchAll[version].is(call)) {
 			calls = mapCalls(
 				ctx,
 				{
 					version,
-					calls: generatedCalls.utility.batchAll[('v' + version) as VersionRepresentation].decode(call).calls,
+					calls: generatedCalls.utility.batchAll[version].decode(call).calls,
 				} as BatchCalls,
 				historyElement,
 			)

@@ -237,7 +237,7 @@ export class OrderBooksStorage {
     const ids = indexes.map((idx) => OrderBooksSnapshotsStorage.getId(id, type, idx));
     const snapshots = await OrderBooksSnapshotsStorage.getSnapshotsByIds(ids);
 
-    const currentPrice = new BigNumber(price);
+    const currentPrice = new BigNumber(price ?? 0);
     const startPrice = new BigNumber(last(snapshots)?.price?.open ?? '0');
 
     const priceChange = calcPriceChange(currentPrice, startPrice);

@@ -10,7 +10,6 @@ def pipeline = new org.js.AppPipeline(
     sonarProjectName:   'sora-subsquid',
     sonarProjectKey:    'jp.co.soramitsu:sora-subsquid',
     preBuildCmds:       ['npm i -g sqd-cli', 'npm ci --include=dev'],
-    buildCmds:          ['NODE_OPTIONS=--max-old-space-size=4096 npm run build'],
-    dockerImageTags:    ['develop': 'dev', 'test': 'latest']
+    buildCmds:          ['NODE_OPTIONS=--max-old-space-size=4096 npm run build']
 )
 pipeline.runPipeline()

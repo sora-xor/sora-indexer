@@ -1,7 +1,7 @@
 @Library('jenkins-library')
 
 def jobParams  = [
-    booleanParam(defaultValue: true, name: 'fullClean'),
+    booleanParam(defaultValue: false, name: 'fullClean'),
     booleanParam(defaultValue: true, name: 'deploy'),
     booleanParam(defaultValue: false, name: 'restart'),
     booleanParam(defaultValue: false, name: 'hardReset'),
@@ -13,6 +13,6 @@ def jobParams  = [
 def pipeline = new org.subqd.AppPipeline(
     steps: this,
     jobParams: jobParams,
-    upstreamJobList: '../subsquid/subsquid-dev'
+    upstreamJobList: '../../subsquid/stage'
 )
 pipeline.runPipeline()

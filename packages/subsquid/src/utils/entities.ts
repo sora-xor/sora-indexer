@@ -3,8 +3,6 @@ import { CallType as CallTypeProduction, EventType as EventTypeProduction } from
 import { CallType as CallTypeStage, EventType as EventTypeStage } from '../types/generated/stage/support'
 import { CallType as CallTypeTest, EventType as EventTypeTest } from '../types/generated/test/support'
 import { CallType as CallTypeDev, EventType as EventTypeDev } from '../types/generated/dev/support'
-import { UnsupportedSpecError } from './errors'
-import { getLog } from './logs'
 import * as sts from '@subsquid/substrate-runtime/lib/sts'
 
 type VersionedObject = {
@@ -69,22 +67,13 @@ function getDataFromVersionedObject<T extends VersionedObject>(ctx: BlockContext
 		throw new Error(`[${ctx.block.header.height}] Object does not conform to VersionedObject pattern`)
 	}
 
-	let entity = null
-
-	switch (entityItem.kind) {
-		case 'call':
-			entity = entityItem.entity
-			break
-		case 'event':
-			entity = entityItem.entity
-			break
-		case 'storage':
-			entity = ctx.block.header
-			break
-	}
+	const entity = entityItem.kind === 'storage'
+		? ctx.block.header
+		: entityItem.entity
 
 	for (const key of getVersionedObjectKeys(obj)) {
 		if (obj[key].is(entity)) {
+
 			return obj[key]
 		}
 	}
@@ -93,78 +82,76 @@ function getDataFromVersionedObject<T extends VersionedObject>(ctx: BlockContext
 }
 
 // Make sure to add "as const" after the versions array to properly narrow the entity object
-export function narrowVersionedObject<T extends VersionedObject, V extends readonly string[]>(obj: T, versions: V): NarrowVersions<T, V> {
+export function narrowVersionedObject<T extends VersionedObject, V extends readonly string[]>(types: T, versions: V): NarrowVersions<T, V> {
 	const narrowed: any = {}
 
 	versions.forEach((version) => {
 		const vKey = `v${version}`
-		narrowed[vKey] = obj[vKey as keyof T]
+		const versionType = types[vKey as keyof T]
+		if (versionType) {
+			narrowed[vKey] = versionType
+		}
 	})
 
 	return narrowed as NarrowVersions<T, V>
 }
 
-export function findCurrentSpecVersion<T extends VersionedObject>(ctx: BlockContext, obj: T, entityItem: EntityItem): string | null {
-	let entity = null
+export function findCurrentSpecVersion<T extends VersionedObject>(ctx: BlockContext, types: T, entityItem: EntityItem): string | null {
+	const entity = entityItem.kind === 'storage'
+		? ctx.block.header
+		: entityItem.entity
 
-	switch (entityItem.kind) {
-		case 'call':
-			entity = entityItem.entity
-			break
-		case 'event':
-			entity = entityItem.entity
-			break
-		case 'storage':
-			entity = ctx.block.header
-			break
-	}
-
-	for (const key of getVersionedObjectKeys(obj)) {
-		if (key.startsWith('v') && !isNaN(parseInt(key[1])) && obj[key].is(entity) === true) {
+	for (const key of getVersionedObjectKeys(types)) {
+		if (key.startsWith('v') && !isNaN(parseInt(key[1])) && types[key].is(entity) === true) {
 			return key.slice(1)
 		}
 	}
 	return null
 }
 
-type ExcludeVersions<T, V extends readonly string[]> = V extends []
-	? T
-	: {
-			[K in Extract<keyof T, `v${string}`> as K extends `v${infer R}`
-				? R extends `${V[number]}`
-					? never
-					: K
-				: K extends `v${infer R}`
-				? R extends `${V[number]}`
-					? never
-					: K
-				: never]: T[K]
-	  }
+export function isCurrentVersionIncluded<T extends VersionedObject, V extends readonly string[]>(ctx: BlockContext, types: T, entityItem: EntityItem, versions: V): boolean {
+	return versions.includes(findCurrentSpecVersion(ctx, types, entityItem) as any)
+}
+
+type IncludeVersions<T, V extends readonly string[]> = {
+    [K in keyof T as K extends `v${infer R}` ? (R extends V[number] ? K : never) : never]: T[K]
+}
+type ExcludeVersions<T, V extends readonly string[]> = {
+    [K in keyof T as K extends `v${infer R}` ? (R extends V[number] ? never : K) : K]: T[K]
+}
 
 // Make sure to add "as const" after the versions array to properly narrow the entity object
 
-export function getEntityRepresentation<T extends VersionedObject, V extends readonly string[] = [], C extends boolean = false>(
+type FilterKind = 'include' | 'exclude'
+type VersionFilter<
+	T extends VersionedObject,
+	K extends FilterKind = 'exclude',
+	V extends readonly string[] = []
+> = K extends 'include'
+	? Exclude<IncludeVersions<T, V>[keyof IncludeVersions<T, V>], string>
+	: Exclude<ExcludeVersions<T, V>[keyof ExcludeVersions<T, V>], string>
+type FilterArgs<K, V> = { kind: K , versions: V }
+
+export function getEntityRepresentation<T extends VersionedObject, K extends FilterKind, V extends readonly string[] = [], C extends boolean = false>(
 	ctx: BlockContext,
 	types: T,
 	entityItem: EntityItem,
-	excludeVersions?: V,
+	filter: FilterArgs<K, V> = { kind: 'exclude' as unknown as K, versions: [] as unknown as V },
 	couldBeNull?: C,
-): C extends true ? Exclude<ExcludeVersions<T, V>[keyof ExcludeVersions<T, V>], string> | null : Exclude<ExcludeVersions<T, V>[keyof ExcludeVersions<T, V>], string> {
+): C extends true ? VersionFilter<T, K, V> | null : VersionFilter<T, K, V> {
 	const allVersions = getAllVersions(types) as V
-	// Exclude the specified versions
-	const versions: V = excludeVersions
-		? (allVersions.filter((v) => !excludeVersions.includes(v)) as readonly string[] as V)
-		: (allVersions as V)
+	// Filter by the specified versions
+	let versions = [] as unknown as V
+	if (filter.kind === 'include') {
+		versions = filter.versions
+	} else if (filter.kind === 'exclude') {
+		versions = allVersions.filter((v) => !filter.versions.includes(v)) as unknown as V
+	}
 
 	const narrowedObject = narrowVersionedObject(types, versions)
 	let data = getDataFromVersionedObject(ctx, narrowedObject, entityItem)
 
 	if (data === null) {
-		const specVersion = findCurrentSpecVersion(ctx, narrowedObject, entityItem)
-		if (!specVersion) {
-			getLog(ctx).error('No spec version found')
-		}
-		const unsupportedSpecError = new UnsupportedSpecError(ctx, { kind: entityItem.kind, name: types.name })
 		if (entityItem.kind === 'call') {
 			data = {
 				decode(call: Call<any>) {
@@ -177,10 +164,7 @@ export function getEntityRepresentation<T extends VersionedObject, V extends rea
 					return entityItem.entity.block._runtime.decodeJsonEventRecordArguments(event)
 				}
 			} as any
-		} else {
-			throw unsupportedSpecError
 		}
-		getLog(ctx).error(unsupportedSpecError.message)
 	}
 	if (data === null && !couldBeNull) {
 		throw new Error(`[${ctx.block.header.height}] Entity data is null`)
@@ -189,42 +173,72 @@ export function getEntityRepresentation<T extends VersionedObject, V extends rea
 	return data as any
 }
 
-export function getCallRepresentation<T extends VersionedObject, V extends readonly string[] = []>(
+export function getCallRepresentation<
+	T extends VersionedObject,
+	K extends FilterKind,
+	V extends readonly string[] = []
+>(
 	ctx: BlockContext,
 	types: T,
 	call: Call<any>,
-	excludeVersions?: V,
+	filter?: FilterArgs<K, V>,
 ) {
-	return getEntityRepresentation<T, V, false>(ctx, types, { kind: 'call', entity: call }, excludeVersions)
+	return getEntityRepresentation<T, K, V, false>(ctx, types, { kind: 'call', entity: call }, filter)
 }
 export function decodeCall<R>(representation: R, call: Call<any>): ExtractCallType<R> {
 	return (representation as any).decode(call)
 }
-export function getCallData<T extends VersionedObject, V extends readonly string[] = []>(ctx: BlockContext, types: T, call: Call<any>, excludeVersions?: V) {
-	const representation = getCallRepresentation<T, V>(ctx, types, call, excludeVersions)
+export function getCallData<
+	T extends VersionedObject,
+	K extends FilterKind,
+	V extends readonly string[] = []
+>(
+	ctx: BlockContext,
+	types: T,
+	call: Call<any>,
+	filter?: FilterArgs<K, V>,
+) {
+	const representation = getCallRepresentation<T, K, V>(ctx, types, call, filter)
 	return decodeCall(representation, call)
 }
 
-export function getEventRepresentation<T extends VersionedObject, V extends readonly string[] = []>(
+export function getEventRepresentation<
+	T extends VersionedObject,
+	K extends FilterKind,
+	V extends readonly string[] = []
+>(
 	ctx: BlockContext,
 	types: T,
 	event: Event<any>,
-	excludeVersions?: V,
+	filter?: FilterArgs<K, V>,
 ) {
-	return getEntityRepresentation<T, V, false>(ctx, types, { kind: 'event', entity: event }, excludeVersions)
+	return getEntityRepresentation<T, K, V, false>(ctx, types, { kind: 'event', entity: event }, filter)
 }
 export function decodeEvent<R>(representation: R, event: Event<any>): ExtractEventType<R> {
 	return (representation as any).decode(event)
 }
-export function getEventData<T extends VersionedObject, V extends readonly string[] = []>(ctx: BlockContext, types: T, event: Event<any>, excludeVersions?: V) {
-	const representation = getEventRepresentation<T, V>(ctx, types, event, excludeVersions)
+export function getEventData<
+	T extends VersionedObject,
+	K extends FilterKind,
+	V extends readonly string[] = []
+>(
+	ctx: BlockContext,
+	types: T,
+	event: Event<any>,
+	filter?: FilterArgs<K, V>,
+) {
+	const representation = getEventRepresentation<T, K, V>(ctx, types, event, filter)
 	return decodeEvent(representation, event)
 }
 
-export function getStorageRepresentation<T extends VersionedObject, V extends readonly string[] = []>(
+export function getStorageRepresentation<
+	T extends VersionedObject,
+	K extends FilterKind,
+	V extends readonly string[] = []
+>(
 	ctx: BlockContext,
 	types: T,
-	excludeVersions?: V,
+	filter?: FilterArgs<K, V>,
 ) {
-	return getEntityRepresentation<T, V, true>(ctx, types, { kind: 'storage' }, excludeVersions, true)
+	return getEntityRepresentation<T, K, V, true>(ctx, types, { kind: 'storage' }, filter, true)
 }

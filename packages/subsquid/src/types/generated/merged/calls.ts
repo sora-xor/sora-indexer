@@ -62,4 +62,3 @@ export * as migrationApp from './migration-app/calls'
 export * as orderBook from './order-book/calls'
 export * as qaTools from './qa-tools/calls'
 export * as substrateBridgeApp from './substrate-bridge-app/calls'
-export const utilityBatchAllCallVersions = ['1', '3', '7', '19', '22', '23', '26', '32', '33', '35', '37', '38', '42', '43', '45', '46', '47', '50', '53', '57', '59', '60', '63', '64', '66', '70', '33Stage', '35Stage', '37Stage', '38Stage', '42Stage', '43Stage', '44Stage', '45Stage', '46Stage', '47Stage', '48Stage', '52Stage', '54Stage', '55Stage', '57Stage', '59Stage', '60Stage', '62Stage', '64Stage', '66Stage', '69Stage', '70Stage', '71Stage', '33Test', '35Test', '37Test', '38Test', '42Test', '43Test', '44Test', '45Test', '46Test', '47Test', '48Test', '52Test', '54Test', '55Test', '57Test', '59Test', '60Test', '62Test', '64Test', '66Test', '69Test', '70Test', '71Test', '70Dev'] as const
