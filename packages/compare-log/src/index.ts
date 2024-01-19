@@ -39,7 +39,7 @@ const logSubsquid: Array<LogData> = []
 const logSubquery: Array<LogData> = []
 let logIndex = 0
 
-const endBlock = parseInt(process.env.END_BLOCK) || Number.MAX_VALUE
+let endBlock = parseInt(process.env.END_BLOCK) || Number.MAX_VALUE
 const startBlockSubsquid = parseInt(process.env.START_BLOCK_SUBSQUID) || 0
 const startBlockSubquery = parseInt(process.env.START_BLOCK_SUBQUERY) || 0
 const showProgressSubsquid = process.env.SHOW_PROGRESS_SUBSQUID ? process.env.SHOW_PROGRESS_SUBSQUID === 'true' : true
@@ -194,6 +194,7 @@ function compare() {
     if (isEqual(logSubquery[logIndex], logSubsquidOnlyString)) {
       console.log(chalk.green(printLog(logSubquery[logIndex])))
     } else {
+      endBlock = parseInt(logSubsquid[logIndex].blockHeight)
       console.error(chalk.magenta(printLog(logSubsquidOnlyString)) + '\n' + chalk.red(printLog(logSubquery[logIndex])))
     }
     logIndex++
